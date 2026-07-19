@@ -7,7 +7,7 @@
 const UPSTOX_BASE_URL = 'https://api.upstox.com/v2';
 
 // Ensure your token is pasted inside these quotes before pushing to GitHub
-let accessToken = 'PASTE_YOUR_ACCESS_TOKEN_HERE'; 
+let accessToken = 'eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiJKUjIxMjQiLCJqdGkiOiI2YTVkMTZjNjA4YzFiODBkMjMyNzY2MzMiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6dHJ1ZSwiaWF0IjoxNzg0NDg1NTc0LCJpc3MiOiJ1ZGFwaS1nYXRld2F5LXNlcnZpY2UiLCJleHAiOjE3ODQ0OTg0MDB9._dlwsYewbVmcLDOibXkOOXE41qznjbuQJoka3IIjTqQ'; 
 
 let activeInstrument = '';
 let marketPollInterval = null;
