@@ -1,13 +1,12 @@
 /**
  * IntraPulse Engine - Upstox API Integration
- * Auto-Connect Version for GitHub Hosting
+ * Auto-Connect & Autocomplete Version
  */
 
-// --- Global State & Configuration ---
 const UPSTOX_BASE_URL = 'https://api.upstox.com/v2';
 
-// Ensure your token is pasted inside these quotes before pushing to GitHub
-let accessToken = 'eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiJKUjIxMjQiLCJqdGkiOiI2YTVkMTZjNjA4YzFiODBkMjMyNzY2MzMiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6dHJ1ZSwiaWF0IjoxNzg0NDg1NTc0LCJpc3MiOiJ1ZGFwaS1nYXRld2F5LXNlcnZpY2UiLCJleHAiOjE3ODQ0OTg0MDB9._dlwsYewbVmcLDOibXkOOXE41qznjbuQJoka3IIjTqQ'; 
+// ⚠️ PASTE YOUR ACCESS TOKEN HERE 
+let accessToken = 'PASTE_YOUR_ACCESS_TOKEN_HERE'; 
 
 let activeInstrument = '';
 let marketPollInterval = null;
@@ -18,12 +17,21 @@ const INDICES = {
     SENSEX: 'BSE_INDEX|SENSEX'
 };
 
-// --- DOM Elements ---
+// Valid NSE Stocks for Autocomplete 
+const VALID_NSE_STOCKS = [
+    "RELIANCE", "TCS", "HDFCBANK", "ICICIBANK", "INFY", 
+    "SBIN", "BHARTIARTL", "ITC", "HINDUNILVR", "LT",
+    "BAJFINANCE", "AXISBANK", "HCLTECH", "MARUTI", "SUNPHARMA",
+    "KOTAKBANK", "ONGC", "TATAMOTORS", "NTPC", "TATASTEEL",
+    "POWERGRID", "ULTRACEMCO", "TECHM", "BAJAJFINSV", "TITAN",
+    "M&M", "WIPRO", "ASIANPAINT", "ADANIENT", "COALINDIA",
+    "ZENSARTECH", "BHEL", "HAL", "SUZLON", "IRFC", "ZOMATO"
+];
+
 const dom = {
     statusDot: document.getElementById('connection-status'),
     statusText: document.getElementById('status-text'),
     
-    // Tickers
     niftyPrice: document.querySelector('#idx-nifty .ticker-price'),
     niftyChange: document.querySelector('#idx-nifty .ticker-change'),
     bankNiftyPrice: document.querySelector('#idx-banknifty .ticker-price'),
@@ -31,17 +39,15 @@ const dom = {
     sensexPrice: document.querySelector('#idx-sensex .ticker-price'),
     sensexChange: document.querySelector('#idx-sensex .ticker-change'),
 
-    // Search & Active Symbol
     searchInput: document.getElementById('stock-search-input'),
+    searchDropdown: document.getElementById('search-results-dropdown'),
     activeSymbol: document.getElementById('active-symbol'),
     activePrice: document.getElementById('active-price'),
     activeChange: document.getElementById('active-change'),
 
-    // Dashboard
     consensusFill: document.getElementById('consensus-fill'),
     consensusText: document.getElementById('consensus-text'),
     
-    // Indicators
     indRsi: document.querySelector('#ind-rsi .ind-value'),
     indRsiSig: document.querySelector('#ind-rsi .ind-signal'),
     indMacd: document.querySelector('#ind-macd .ind-value'),
@@ -56,7 +62,6 @@ const dom = {
     calcStoploss: document.getElementById('calc-stoploss'),
 };
 
-// --- Auto-Initialization ---
 window.addEventListener('DOMContentLoaded', () => {
     if (accessToken && accessToken !== 'PASTE_YOUR_ACCESS_TOKEN_HERE') {
         dom.statusText.textContent = "Connecting to Upstox...";
@@ -67,11 +72,64 @@ window.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+// --- Search & Autocomplete Logic ---
+dom.searchInput.addEventListener('input', function() {
+    const query = this.value.trim().toUpperCase();
+    dom.searchDropdown.innerHTML = ''; 
+    
+    if (query.length === 0) {
+        dom.searchDropdown.classList.add('hidden');
+        return;
+    }
+
+    const matches = VALID_NSE_STOCKS.filter(stock => stock.includes(query));
+
+    if (matches.length > 0) {
+        dom.searchDropdown.classList.remove('hidden');
+        matches.forEach(stock => {
+            const item = document.createElement('div');
+            item.className = 'dropdown-item';
+            const highlightRegex = new RegExp(`(${query})`, 'gi');
+            item.innerHTML = stock.replace(highlightRegex, "<span style='color: var(--color-buy);'>$1</span>");
+            
+            item.addEventListener('click', () => {
+                dom.searchInput.value = stock;
+                dom.searchDropdown.classList.add('hidden');
+                
+                activeInstrument = `NSE_EQ|${stock}`;
+                analyzeStock(activeInstrument);
+            });
+            
+            dom.searchDropdown.appendChild(item);
+        });
+    } else {
+        dom.searchDropdown.classList.remove('hidden');
+        const noResult = document.createElement('div');
+        noResult.className = 'dropdown-item';
+        noResult.style.color = "var(--color-text-muted)";
+        noResult.textContent = "No valid stock found";
+        dom.searchDropdown.appendChild(noResult);
+    }
+});
+
+dom.searchInput.addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') e.preventDefault(); 
+});
+
+document.addEventListener('click', function(e) {
+    if (!dom.searchInput.contains(e.target) && !dom.searchDropdown.contains(e.target)) {
+        dom.searchDropdown.classList.add('hidden');
+    }
+});
+
 // --- Main API Fetch Controllers ---
 async function fetchQuotes(instrumentKeys) {
-    const keysParam = Array.isArray(instrumentKeys) ? instrumentKeys.join(',') : instrumentKeys;
+    const keysParam = Array.isArray(instrumentKeys) 
+        ? instrumentKeys.map(key => encodeURIComponent(key)).join(',') 
+        : encodeURIComponent(instrumentKeys);
+        
     try {
-        const response = await fetch(`${UPSTOX_BASE_URL}/market-quote/quotes?instrument_key=${encodeURIComponent(keysParam)}`, {
+        const response = await fetch(`${UPSTOX_BASE_URL}/market-quote/quotes?instrument_key=${keysParam}`, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json',
@@ -79,10 +137,15 @@ async function fetchQuotes(instrumentKeys) {
             }
         });
         const data = await response.json();
-        if (data.status === 'success') return data.data;
+        
+        if (data.status === 'success') {
+            return data.data;
+        }
         throw new Error(data.errors?.[0]?.message || 'API Error');
     } catch (error) {
         console.error("Quote Fetch Error:", error);
+        dom.statusText.textContent = "API Error (Check Console / Token Expired)";
+        dom.statusText.style.color = "var(--color-sell)";
         return null;
     }
 }
@@ -124,9 +187,6 @@ async function initMarketStream() {
                 analyzeStock(activeInstrument);
             }
         }, 5000);
-    } else {
-        dom.statusText.textContent = "Connection Failed";
-        console.error("Failed to connect. Check Access Token.");
     }
 }
 
@@ -144,13 +204,6 @@ function updateTickers(data) {
         dom.sensexChange.textContent = `(${data[INDICES.SENSEX].net_change}%)`;
     }
 }
-
-dom.searchInput.addEventListener('keypress', function (e) {
-    if (e.key === 'Enter') {
-        activeInstrument = this.value.trim();
-        if(activeInstrument) analyzeStock(activeInstrument);
-    }
-});
 
 async function analyzeStock(instrumentKey) {
     const quoteData = await fetchQuotes(instrumentKey);
