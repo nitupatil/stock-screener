@@ -1,20 +1,17 @@
 /**
  * IntraPulse Engine - Upstox API Integration
- * STRICT MODE: No mock data. All data is fetched live from Upstox API v2.
+ * Auto-Connect Version for GitHub Hosting
  */
 
 // --- Global State & Configuration ---
 const UPSTOX_BASE_URL = 'https://api.upstox.com/v2';
 
-// TESTING ONLY: Hardcoded credentials. Remove or use environment variables in production.
-const API_KEY = 'c1b0759d-0303-4abc-87cd-1bf7cb7042fa';
-const API_SECRET = 'vycexnccr7';
-let accessToken = 'eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiJKUjIxMjQiLCJqdGkiOiI2YTVkMTZjNjA4YzFiODBkMjMyNzY2MzMiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6dHJ1ZSwiaWF0IjoxNzg0NDg1NTc0LCJpc3MiOiJ1ZGFwaS1nYXRld2F5LXNlcnZpY2UiLCJleHAiOjE3ODQ0OTg0MDB9._dlwsYewbVmcLDOibXkOOXE41qznjbuQJoka3IIjTqQ'; 
+// Ensure your token is pasted inside these quotes before pushing to GitHub
+let accessToken = 'PASTE_YOUR_ACCESS_TOKEN_HERE'; 
 
 let activeInstrument = '';
 let marketPollInterval = null;
 
-// Major Index Instrument Keys for Upstox
 const INDICES = {
     NIFTY: 'NSE_INDEX|Nifty 50',
     BANKNIFTY: 'NSE_INDEX|Nifty Bank',
@@ -23,9 +20,8 @@ const INDICES = {
 
 // --- DOM Elements ---
 const dom = {
-    tokenInput: document.getElementById('access-token'),
-    btnConnect: document.getElementById('btn-connect'),
     statusDot: document.getElementById('connection-status'),
+    statusText: document.getElementById('status-text'),
     
     // Tickers
     niftyPrice: document.querySelector('#idx-nifty .ticker-price'),
@@ -55,45 +51,23 @@ const dom = {
     indBb: document.querySelector('#ind-bb .ind-value'),
     indBbSig: document.querySelector('#ind-bb .ind-signal'),
 
-    // Matrix
     calcEntry: document.getElementById('calc-entry'),
     calcTarget: document.getElementById('calc-target'),
     calcStoploss: document.getElementById('calc-stoploss'),
-
-    // Screeners
-    buyScreenerBody: document.getElementById('buy-screener-body'),
-    sellScreenerBody: document.getElementById('sell-screener-body')
 };
 
-// --- Authentication & Initialization ---
-
-// Auto-initialize on page load since token is hardcoded
+// --- Auto-Initialization ---
 window.addEventListener('DOMContentLoaded', () => {
     if (accessToken && accessToken !== 'PASTE_YOUR_ACCESS_TOKEN_HERE') {
-        dom.tokenInput.value = "Using Hardcoded Token...";
-        dom.tokenInput.disabled = true;
-        dom.btnConnect.textContent = "Connecting...";
+        dom.statusText.textContent = "Connecting to Upstox...";
         initMarketStream();
+    } else {
+        dom.statusText.textContent = "Missing Token";
+        console.error("Please add your Upstox Access Token to script.js");
     }
-});
-
-// Keep manual button functional just in case
-dom.btnConnect.addEventListener('click', () => {
-    if (!dom.tokenInput.disabled) {
-        accessToken = dom.tokenInput.value.trim();
-    }
-    
-    if (!accessToken || accessToken === 'PASTE_YOUR_ACCESS_TOKEN_HERE') {
-        alert("Please enter a valid Upstox Access Token or hardcode it in script.js.");
-        return;
-    }
-    
-    dom.btnConnect.textContent = "Connecting...";
-    initMarketStream();
 });
 
 // --- Main API Fetch Controllers ---
-
 async function fetchQuotes(instrumentKeys) {
     const keysParam = Array.isArray(instrumentKeys) ? instrumentKeys.join(',') : instrumentKeys;
     try {
@@ -115,7 +89,6 @@ async function fetchQuotes(instrumentKeys) {
 
 async function fetchIntradayCandles(instrumentKey) {
     try {
-        // Fetching 1-minute historical intraday data for indicator calculation
         const response = await fetch(`${UPSTOX_BASE_URL}/historical-candle/intraday/${encodeURIComponent(instrumentKey)}/1minute`, {
             method: 'GET',
             headers: {
@@ -133,18 +106,15 @@ async function fetchIntradayCandles(instrumentKey) {
 }
 
 // --- Application Logic ---
-
 async function initMarketStream() {
-    // Initial fetch for top ticker
     const indexData = await fetchQuotes([INDICES.NIFTY, INDICES.BANKNIFTY, INDICES.SENSEX]);
     
     if (indexData) {
         dom.statusDot.classList.remove('disconnected');
         dom.statusDot.classList.add('connected');
-        dom.btnConnect.textContent = "Connected Live";
+        dom.statusText.textContent = "Live Stream Active";
         updateTickers(indexData);
         
-        // Start polling (Upstox API rate limits apply, poll every 5 seconds)
         if (marketPollInterval) clearInterval(marketPollInterval);
         marketPollInterval = setInterval(async () => {
             const freshIndices = await fetchQuotes([INDICES.NIFTY, INDICES.BANKNIFTY, INDICES.SENSEX]);
@@ -155,8 +125,8 @@ async function initMarketStream() {
             }
         }, 5000);
     } else {
-        dom.btnConnect.textContent = "Connection Failed";
-        alert("Failed to connect. Check Access Token or CORS policy.");
+        dom.statusText.textContent = "Connection Failed";
+        console.error("Failed to connect. Check Access Token.");
     }
 }
 
@@ -175,7 +145,6 @@ function updateTickers(data) {
     }
 }
 
-// Search listener (Expects Upstox Instrument Key format: NSE_EQ|INE123456789)
 dom.searchInput.addEventListener('keypress', function (e) {
     if (e.key === 'Enter') {
         activeInstrument = this.value.trim();
@@ -184,7 +153,6 @@ dom.searchInput.addEventListener('keypress', function (e) {
 });
 
 async function analyzeStock(instrumentKey) {
-    // 1. Fetch live quote
     const quoteData = await fetchQuotes(instrumentKey);
     if (!quoteData || !quoteData[instrumentKey]) return;
     
@@ -193,24 +161,18 @@ async function analyzeStock(instrumentKey) {
     dom.activePrice.textContent = `₹${quote.last_price}`;
     dom.activeChange.textContent = `${quote.net_change}%`;
 
-    // 2. Fetch candles for Math
     const candles = await fetchIntradayCandles(instrumentKey);
     if (!candles) return;
 
-    // Upstox returns candles as: [timestamp, open, high, low, close, volume, open_interest]
-    // We need closing prices (index 4) from oldest to newest for indicator math
     const closePrices = candles.map(c => c[4]).reverse(); 
 
-    // 3. Calculate Indicators
     const rsi = calculateRSI(closePrices, 14);
     const ema9 = calculateEMA(closePrices, 9);
     const ema21 = calculateEMA(closePrices, 21);
     
-    // 4. Update UI & Signals
     let buySignals = 0;
-    let totalSignals = 3; // RSI, EMA Cross, Price Action
+    let totalSignals = 3;
 
-    // RSI Logic
     dom.indRsi.textContent = rsi.toFixed(2);
     if (rsi < 30) {
         dom.indRsiSig.textContent = "OVERSOLD / BUY";
@@ -224,7 +186,6 @@ async function analyzeStock(instrumentKey) {
         dom.indRsiSig.style.color = "var(--color-hold)";
     }
 
-    // EMA Logic (9 vs 21)
     const emaVal = ema9[ema9.length - 1];
     dom.indEma.textContent = emaVal.toFixed(2);
     if (ema9[ema9.length - 1] > ema21[ema21.length - 1]) {
@@ -236,7 +197,6 @@ async function analyzeStock(instrumentKey) {
         dom.indEmaSig.style.color = "var(--color-sell)";
     }
 
-    // Consensus Meter
     const consensusPct = (buySignals / totalSignals) * 100;
     dom.consensusFill.style.width = `${consensusPct}%`;
     
@@ -251,29 +211,22 @@ async function analyzeStock(instrumentKey) {
         dom.consensusText.style.color = "var(--color-sell)";
     }
 
-    // Dynamic Trade Levels Matrix (Based on basic percentages applied to live fetched price)
     const currentPrice = quote.last_price;
     dom.calcEntry.textContent = `₹${currentPrice}`;
-    dom.calcTarget.textContent = `₹${(currentPrice * 1.015).toFixed(2)}`; // Target 1.5% live
-    dom.calcStoploss.textContent = `₹${(currentPrice * 0.99).toFixed(2)}`; // Stoploss 1% live
+    dom.calcTarget.textContent = `₹${(currentPrice * 1.015).toFixed(2)}`;
+    dom.calcStoploss.textContent = `₹${(currentPrice * 0.99).toFixed(2)}`;
 }
-
-// --- Mathematical Indicator Functions ---
-// Pure JS calculations using the fetched live data points.
 
 function calculateRSI(prices, period) {
     if (prices.length < period) return 50;
     let gains = 0, losses = 0;
-    
     for (let i = 1; i <= period; i++) {
         const diff = prices[i] - prices[i - 1];
         if (diff >= 0) gains += diff;
         else losses -= diff;
     }
-    
     let avgGain = gains / period;
     let avgLoss = losses / period;
-    
     for (let i = period + 1; i < prices.length; i++) {
         const diff = prices[i] - prices[i - 1];
         if (diff >= 0) {
@@ -284,7 +237,6 @@ function calculateRSI(prices, period) {
             avgLoss = (avgLoss * (period - 1) - diff) / period;
         }
     }
-    
     if (avgLoss === 0) return 100;
     const rs = avgGain / avgLoss;
     return 100 - (100 / (1 + rs));
