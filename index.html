@@ -1,1423 +1,190 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-
     <meta charset="UTF-8">
-
-    <meta name="viewport"
-        content="width=device-width, initial-scale=1.0">
-
-    <meta name="theme-color"
-        content="#0b0f19">
-
-    <title>
-        Intraday Stock Screener
-    </title>
-
-    <link rel="stylesheet"
-        href="style.css">
-
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>IntraPulse // Real-Time Intraday Analytics</title>
+    <link rel="stylesheet" href="styles.css">
+    <!-- Google Fonts for crisp UI -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
 </head>
-
-
 <body>
 
-
-    <!-- =====================================================
-         APPLICATION WRAPPER
-    ====================================================== -->
-
-    <div class="app-wrapper">
-
-
-        <!-- =================================================
-             SIDEBAR
-        ================================================== -->
-
-        <aside class="sidebar"
-            id="sidebar">
-
-
-            <div class="sidebar-brand">
-
-                <div class="brand-icon">
-                    📈
-                </div>
-
-                <div class="brand-text">
-
-                    <h1>
-                        Stock
-                    </h1>
-
-                    <span>
-                        Screener
-                    </span>
-
-                </div>
-
+    <!-- Top Market Ticker -->
+    <div class="ticker-wrap">
+        <div class="ticker-container" id="market-ticker">
+            <div class="ticker-item" id="idx-nifty">
+                <span class="ticker-name">NIFTY 50</span>
+                <span class="ticker-price">--.--</span>
+                <span class="ticker-change">(--.--)</span>
             </div>
-
-
-            <nav class="sidebar-navigation">
-
-
-                <button class="nav-item active"
-                    data-page="dashboard">
-
-                    <span class="nav-icon">
-                        ◈
-                    </span>
-
-                    <span>
-                        Dashboard
-                    </span>
-
-                </button>
-
-
-                <button class="nav-item"
-                    data-page="buy-signals">
-
-                    <span class="nav-icon">
-                        ↗
-                    </span>
-
-                    <span>
-                        Buy Signals
-                    </span>
-
-                </button>
-
-
-                <button class="nav-item"
-                    data-page="sell-signals">
-
-                    <span class="nav-icon">
-                        ↘
-                    </span>
-
-                    <span>
-                        Sell Signals
-                    </span>
-
-                </button>
-
-
-                <button class="nav-item"
-                    data-page="market">
-
-                    <span class="nav-icon">
-                        ◉
-                    </span>
-
-                    <span>
-                        Market Overview
-                    </span>
-
-                </button>
-
-
-                <button class="nav-item"
-                    data-page="watchlist">
-
-                    <span class="nav-icon">
-                        ☆
-                    </span>
-
-                    <span>
-                        Watchlist
-                    </span>
-
-                </button>
-
-
-            </nav>
-
-
-            <div class="sidebar-footer">
-
-
-                <div class="market-status-card">
-
-
-                    <div class="status-header">
-
-                        <span class="status-dot"></span>
-
-                        <span>
-                            Market Status
-                        </span>
-
-                    </div>
-
-
-                    <strong id="market-status">
-                        MARKET OPEN
-                    </strong>
-
-
-                    <small id="market-time">
-                        Loading market time...
-                    </small>
-
-
-                </div>
-
-
-                <div class="data-disclaimer">
-
-                    <span>
-                        ⚠
-                    </span>
-
-                    <p>
-                        Technical analysis is not financial advice.
-                    </p>
-
-                </div>
-
-
+            <div class="ticker-item" id="idx-banknifty">
+                <span class="ticker-name">BANK NIFTY</span>
+                <span class="ticker-price">--.--</span>
+                <span class="ticker-change">(--.--)</span>
             </div>
+            <div class="ticker-item" id="idx-sensex">
+                <span class="ticker-name">SENSEX</span>
+                <span class="ticker-price">--.--</span>
+                <span class="ticker-change">(--.--)</span>
+            </div>
+        </div>
+    </div>
 
+    <!-- Main Application Header -->
+    <header class="main-header">
+        <div class="logo-area">
+            <h1>Intra<span>Pulse</span></h1>
+            <span class="badge">Intraday Engine</span>
+        </div>
+        
+        <!-- Upstox API Credentials Configuration -->
+        <div class="api-config-panel">
+            <div class="input-group">
+                <label for="access-token">Upstox Access Token</label>
+                <input type="password" id="access-token" placeholder="Paste runtime access token..." autocomplete="off">
+            </div>
+            <button id="btn-connect" class="btn-primary">Connect Stream</button>
+            <span id="connection-status" class="status-dot disconnected"></span>
+        </div>
+    </header>
 
-        </aside>
-
-
-
-        <!-- =================================================
-             MAIN APPLICATION
-        ================================================== -->
-
-        <main class="main-content">
-
-
-            <!-- =============================================
-                 TOP HEADER
-            ============================================== -->
-
-            <header class="top-header">
-
-
-                <button class="mobile-menu-button"
-                    id="mobile-menu-button">
-
-                    ☰
-
-                </button>
-
-
-                <div class="page-heading">
-
-
-                    <h2 id="page-title">
-                        Market Dashboard
-                    </h2>
-
-
-                    <p id="page-subtitle">
-                        Real-time technical analysis of the Indian stock market
-                    </p>
-
-
-                </div>
-
-
-                <div class="header-actions">
-
-
-                    <div class="market-live-indicator">
-
-                        <span class="live-dot"></span>
-
-                        <span>
-                            LIVE
-                        </span>
-
-                    </div>
-
-
-                    <button class="refresh-button"
-                        id="refresh-button">
-
-                        <span>
-                            ↻
-                        </span>
-
-                        Refresh
-
-                    </button>
-
-
-                </div>
-
-
-            </header>
-
-
-
-            <!-- =============================================
-                 SEARCH SECTION
-            ============================================== -->
-
-            <section class="search-section">
-
-
+    <!-- Main Workspace Grid -->
+    <main class="app-container">
+        
+        <!-- Left Column: Search & Deep Dive Analysis -->
+        <section class="panel-left">
+            <div class="card search-card">
+                <h2>Symbol Search</h2>
                 <div class="search-box">
-
-
-                    <span class="search-icon">
-                        ⌕
-                    </span>
-
-
-                    <input type="text"
-                        id="stock-search"
-                        placeholder="Search any stock, company or symbol...">
-
-
-                    <button class="search-clear"
-                        id="search-clear">
-
-                        ×
-
-                    </button>
-
-
+                    <input type="text" id="stock-search-input" placeholder="Search stock (e.g., RELIANCE, TCS)..." autocomplete="off">
+                    <div id="search-results-dropdown" class="dropdown-content hidden"></div>
                 </div>
-
-
-                <button class="search-button"
-                    id="search-button">
-
-                    Analyze Stock
-
-                </button>
-
-
-            </section>
-
-
-
-            <!-- =============================================
-                 SEARCH RESULT / STOCK ANALYSIS
-            ============================================== -->
-
-            <section class="stock-analysis-section hidden"
-                id="stock-analysis-section">
-
-
-                <div class="section-heading">
-
-
-                    <div>
-
-                        <span class="section-label">
-                            STOCK ANALYSIS
-                        </span>
-
-                        <h2 id="analysis-stock-name">
-                            Stock Name
-                        </h2>
-
-                    </div>
-
-
-                    <button class="close-analysis"
-                        id="close-analysis">
-
-                        ×
-
-                    </button>
-
-
-                </div>
-
-
-                <div class="analysis-overview">
-
-
-                    <div class="analysis-price-block">
-
-
-                        <span class="analysis-symbol"
-                            id="analysis-symbol">
-
-                            SYMBOL
-
-                        </span>
-
-
-                        <div class="analysis-price"
-                            id="analysis-price">
-
-                            ₹0.00
-
-                        </div>
-
-
-                        <div class="analysis-price-change"
-                            id="analysis-price-change">
-
-                            +0.00%
-
-                        </div>
-
-
-                        <small id="analysis-last-updated">
-
-                            Last updated: --:--:--
-
-                        </small>
-
-
-                    </div>
-
-
-                    <div class="analysis-signal-block">
-
-
-                        <span class="signal-label">
-                            TECHNICAL SIGNAL
-                        </span>
-
-
-                        <div class="large-signal-badge"
-                            id="analysis-signal">
-
-                            ANALYZING
-
-                        </div>
-
-
-                        <div class="technical-score">
-
-                            <span>
-                                Technical Score
-                            </span>
-
-
-                            <strong id="analysis-score">
-
-                                0/100
-
-                            </strong>
-
-                        </div>
-
-
-                    </div>
-
-
-                </div>
-
-
-
-                <!-- =========================================
-                     TRADE LEVELS
-                ========================================== -->
-
-                <div class="trade-levels">
-
-
-                    <div class="trade-level-card entry-level">
-
-                        <span>
-                            Suggested Entry
-                        </span>
-
-                        <strong id="analysis-entry-price">
-                            ₹0.00
-                        </strong>
-
-                    </div>
-
-
-                    <div class="trade-level-card target-level">
-
-                        <span>
-                            Target Price
-                        </span>
-
-                        <strong id="analysis-target-price">
-                            ₹0.00
-                        </strong>
-
-                    </div>
-
-
-                    <div class="trade-level-card stop-level">
-
-                        <span>
-                            Stop Loss
-                        </span>
-
-                        <strong id="analysis-stop-loss">
-                            ₹0.00
-                        </strong>
-
-                    </div>
-
-
-                    <div class="trade-level-card exit-level">
-
-                        <span>
-                            Suggested Exit
-                        </span>
-
-                        <strong id="analysis-exit-price">
-                            ₹0.00
-                        </strong>
-
-                    </div>
-
-
-                </div>
-
-
-
-                <!-- =========================================
-                     INDICATOR ANALYSIS
-                ========================================== -->
-
-                <div class="indicator-analysis">
-
-
-                    <div class="section-heading">
-
-                        <div>
-
-                            <span class="section-label">
-                                INDICATORS
-                            </span>
-
-                            <h3>
-                                Technical Analysis Breakdown
-                            </h3>
-
-                        </div>
-
-                    </div>
-
-
-                    <div class="indicator-grid"
-                        id="indicator-grid">
-
-
-                        <!-- JavaScript will insert indicators -->
-
-
-                    </div>
-
-
-                </div>
-
-
-
-                <!-- =========================================
-                     RISK REWARD
-                ========================================== -->
-
-                <div class="risk-reward-section">
-
-
-                    <div class="risk-reward-card">
-
-
-                        <span>
-                            Risk / Reward Ratio
-                        </span>
-
-
-                        <strong id="risk-reward-ratio">
-                            1 : 0
-                        </strong>
-
-
-                    </div>
-
-
-                    <div class="risk-reward-card">
-
-
-                        <span>
-                            Trend Strength
-                        </span>
-
-
-                        <strong id="trend-strength">
-                            --
-                        </strong>
-
-
-                    </div>
-
-
-                    <div class="risk-reward-card">
-
-
-                        <span>
-                            Volume Strength
-                        </span>
-
-
-                        <strong id="volume-strength">
-                            --
-                        </strong>
-
-
-                    </div>
-
-
-                </div>
-
-
-            </section>
-
-
-
-            <!-- =============================================
-                 DASHBOARD PAGE
-            ============================================== -->
-
-            <section id="dashboard-page"
-                class="page-section">
-
-
-                <!-- =========================================
-                     MARKET INDEX CARDS
-                ========================================== -->
-
-                <section class="market-index-section">
-
-
-                    <div class="section-heading">
-
-
-                        <div>
-
-                            <span class="section-label">
-                                MARKET OVERVIEW
-                            </span>
-
-                            <h2>
-                                Major Indices
-                            </h2>
-
-                        </div>
-
-
-                        <span class="last-updated">
-                            Updated:
-                            <strong id="dashboard-updated-time">
-                                --
-                            </strong>
-                        </span>
-
-
-                    </div>
-
-
-                    <div class="index-grid"
-                        id="index-grid">
-
-
-                        <!-- Index cards generated by JavaScript -->
-
-
-                    </div>
-
-
-                </section>
-
-
-
-                <!-- =========================================
-                     MARKET BREADTH
-                ========================================== -->
-
-                <section class="market-breadth-section">
-
-
-                    <div class="breadth-card">
-
-
-                        <div class="breadth-header">
-
-                            <div>
-
-                                <span class="section-label">
-                                    MARKET BREADTH
-                                </span>
-
-                                <h3>
-                                    Advance / Decline
-                                </h3>
-
-                            </div>
-
-
-                            <span class="breadth-sentiment"
-                                id="market-sentiment">
-
-                                ANALYZING
-
-                            </span>
-
-                        </div>
-
-
-                        <div class="breadth-bar">
-
-
-                            <div class="advance-bar"
-                                id="advance-bar">
-
-                            </div>
-
-
-                            <div class="decline-bar"
-                                id="decline-bar">
-
-                            </div>
-
-
-                        </div>
-
-
-                        <div class="breadth-values">
-
-
-                            <div>
-
-                                <span class="advance-dot"></span>
-
-                                <span>
-                                    Advancing
-                                </span>
-
-                                <strong id="advancing-count">
-                                    0
-                                </strong>
-
-                            </div>
-
-
-                            <div>
-
-                                <span class="decline-dot"></span>
-
-                                <span>
-                                    Declining
-                                </span>
-
-                                <strong id="declining-count">
-                                    0
-                                </strong>
-
-                            </div>
-
-
-                        </div>
-
-
-                    </div>
-
-
-
-                    <div class="market-trend-card">
-
-
-                        <span class="section-label">
-                            OVERALL MARKET TREND
-                        </span>
-
-
-                        <div class="market-trend-content">
-
-
-                            <div class="trend-icon"
-                                id="market-trend-icon">
-
-                                ↗
-
-                            </div>
-
-
-                            <div>
-
-                                <h3 id="market-trend">
-                                    Analyzing...
-
-                                </h3>
-
-
-                                <p id="market-trend-description">
-                                    Calculating market trend from multiple indicators
-                                </p>
-
-                            </div>
-
-
-                        </div>
-
-
-                    </div>
-
-
-                </section>
-
-
-
-                <!-- =========================================
-                     TOP OPPORTUNITIES
-                ========================================== -->
-
-                <section class="opportunities-section">
-
-
-                    <div class="section-heading">
-
-
-                        <div>
-
-                            <span class="section-label">
-                                MARKET SCANNER
-                            </span>
-
-
-                            <h2>
-                                Top Intraday Opportunities
-                            </h2>
-
-
-                            <p>
-                                Stocks ranked using multi-indicator technical analysis
-                            </p>
-
-                        </div>
-
-
-                        <div class="scanner-filters">
-
-
-                            <button class="filter-button active"
-                                data-filter="all">
-
-                                All
-
-                            </button>
-
-
-                            <button class="filter-button"
-                                data-filter="buy">
-
-                                Buy
-
-                            </button>
-
-
-                            <button class="filter-button"
-                                data-filter="sell">
-
-                                Sell
-
-                            </button>
-
-
-                        </div>
-
-
-                    </div>
-
-
-
-                    <div class="opportunity-table-wrapper">
-
-
-                        <table class="opportunity-table">
-
-
-                            <thead>
-
-                                <tr>
-
-                                    <th>
-                                        Rank
-                                    </th>
-
-
-                                    <th>
-                                        Stock
-                                    </th>
-
-
-                                    <th>
-                                        Price
-                                    </th>
-
-
-                                    <th>
-                                        Change
-                                    </th>
-
-
-                                    <th>
-                                        Technical Score
-                                    </th>
-
-
-                                    <th>
-                                        Signal
-                                    </th>
-
-
-                                    <th>
-                                        Entry
-                                    </th>
-
-
-                                    <th>
-                                        Target
-                                    </th>
-
-
-                                    <th>
-                                        Stop Loss
-                                    </th>
-
-
-                                    <th>
-                                        Action
-                                    </th>
-
-                                </tr>
-
-                            </thead>
-
-
-                            <tbody id="opportunity-table-body">
-
-
-                                <!-- Stock rows generated by JavaScript -->
-
-
-                            </tbody>
-
-
-                        </table>
-
-
-                    </div>
-
-
-                </section>
-
-
-
-                <!-- =========================================
-                     TOP GAINERS AND LOSERS
-                ========================================== -->
-
-                <section class="gainers-losers-section">
-
-
-                    <div class="stock-list-card">
-
-
-                        <div class="section-heading compact">
-
-
-                            <div>
-
-                                <span class="section-label">
-                                    TOP MOVERS
-                                </span>
-
-
-                                <h3>
-                                    Top Gainers
-                                </h3>
-
-                            </div>
-
-
-                            <span class="positive-label">
-                                ↗ GAINERS
-                            </span>
-
-                        </div>
-
-
-                        <div class="mini-stock-list"
-                            id="top-gainers-list">
-
-
-                            <!-- Generated by JavaScript -->
-
-
-                        </div>
-
-
-                    </div>
-
-
-
-                    <div class="stock-list-card">
-
-
-                        <div class="section-heading compact">
-
-
-                            <div>
-
-                                <span class="section-label">
-                                    TOP MOVERS
-                                </span>
-
-
-                                <h3>
-                                    Top Losers
-                                </h3>
-
-                            </div>
-
-
-                            <span class="negative-label">
-                                ↘ LOSERS
-                            </span>
-
-                        </div>
-
-
-                        <div class="mini-stock-list"
-                            id="top-losers-list">
-
-
-                            <!-- Generated by JavaScript -->
-
-
-                        </div>
-
-
-                    </div>
-
-
-                </section>
-
-
-
-            </section>
-
-
-
-            <!-- =============================================
-                 BUY SIGNALS PAGE
-            ============================================== -->
-
-            <section id="buy-signals-page"
-                class="page-section hidden">
-
-
-                <div class="page-section-header">
-
-
-                    <span class="section-label">
-                        BUY SIGNALS
-                    </span>
-
-
-                    <h2>
-                        Strongest Buy Opportunities
-                    </h2>
-
-
-                    <p>
-                        Stocks with the highest bullish confirmation from technical indicators
-                    </p>
-
-
-                </div>
-
-
-                <div class="buy-signal-grid"
-                    id="buy-signal-grid">
-
-
-                    <!-- Generated by JavaScript -->
-
-
-                </div>
-
-
-            </section>
-
-
-
-            <!-- =============================================
-                 SELL SIGNALS PAGE
-            ============================================== -->
-
-            <section id="sell-signals-page"
-                class="page-section hidden">
-
-
-                <div class="page-section-header">
-
-
-                    <span class="section-label">
-                        SELL SIGNALS
-                    </span>
-
-
-                    <h2>
-                        Stocks Showing Weakness
-                    </h2>
-
-
-                    <p>
-                        Stocks with bearish technical confirmation and possible exit signals
-                    </p>
-
-
-                </div>
-
-
-                <div class="sell-signal-grid"
-                    id="sell-signal-grid">
-
-
-                    <!-- Generated by JavaScript -->
-
-
-                </div>
-
-
-            </section>
-
-
-
-            <!-- =============================================
-                 MARKET OVERVIEW PAGE
-            ============================================== -->
-
-            <section id="market-page"
-                class="page-section hidden">
-
-
-                <div class="page-section-header">
-
-
-                    <span class="section-label">
-                        MARKET ANALYSIS
-                    </span>
-
-
-                    <h2>
-                        Complete Market Overview
-                    </h2>
-
-
-                    <p>
-                        Overall market strength calculated from major indices and market breadth
-                    </p>
-
-
-                </div>
-
-
-                <div class="market-overview-grid">
-
-
-                    <div class="market-stat-card">
-
-
-                        <span>
-                            NIFTY 50 Trend
-                        </span>
-
-
-                        <strong id="market-nifty-trend">
-                            --
-                        </strong>
-
-
-                    </div>
-
-
-                    <div class="market-stat-card">
-
-
-                        <span>
-                            Bank NIFTY Trend
-                        </span>
-
-
-                        <strong id="market-banknifty-trend">
-                            --
-                        </strong>
-
-
-                    </div>
-
-
-                    <div class="market-stat-card">
-
-
-                        <span>
-                            Market Momentum
-                        </span>
-
-
-                        <strong id="market-momentum">
-                            --
-                        </strong>
-
-
-                    </div>
-
-
-                    <div class="market-stat-card">
-
-
-                        <span>
-                            Market Volatility
-                        </span>
-
-
-                        <strong id="market-volatility">
-                            --
-                        </strong>
-
-
-                    </div>
-
-
-                </div>
-
-
-            </section>
-
-
-
-            <!-- =============================================
-                 WATCHLIST PAGE
-            ============================================== -->
-
-            <section id="watchlist-page"
-                class="page-section hidden">
-
-
-                <div class="page-section-header">
-
-
-                    <span class="section-label">
-                        PERSONAL WATCHLIST
-                    </span>
-
-
-                    <h2>
-                        My Watchlist
-                    </h2>
-
-
-                    <p>
-                        Track stocks you want to monitor
-                    </p>
-
-
-                </div>
-
-
-                <div class="watchlist-container"
-                    id="watchlist-container">
-
-
-                    <div class="empty-watchlist">
-
-                        <span>
-                            ☆
-                        </span>
-
-
-                        <h3>
-                            Your watchlist is empty
-                        </h3>
-
-
-                        <p>
-                            Search for a stock and add it to your watchlist
-                        </p>
-
-                    </div>
-
-
-                </div>
-
-
-            </section>
-
-
-
-            <!-- =============================================
-                 FOOTER
-            ============================================== -->
-
-            <footer class="app-footer">
-
-
-                <div>
-
-                    <strong>
-                        Intraday Stock Screener
-                    </strong>
-
-
-                    <span>
-                        Personal Technical Analysis Tool
-                    </span>
-
-                </div>
-
-
-                <div>
-
-                    <span>
-                        Data:
-                    </span>
-
-
-                    <strong>
-                        Market API
-                    </strong>
-
-                </div>
-
-
-                <div>
-
-                    <span>
-                        Last Scan:
-                    </span>
-
-
-                    <strong id="footer-last-scan">
-                        --
-                    </strong>
-
-                </div>
-
-
-            </footer>
-
-
-        </main>
-
-
-    </div>
-
-
-
-    <!-- =====================================================
-         STOCK DETAILS MODAL
-    ====================================================== -->
-
-    <div class="modal-overlay hidden"
-        id="stock-modal">
-
-
-        <div class="stock-modal">
-
-
-            <button class="modal-close"
-                id="modal-close">
-
-                ×
-
-            </button>
-
-
-            <div class="modal-content"
-                id="modal-content">
-
-
-                <!-- Stock details generated by JavaScript -->
-
-
             </div>
 
-
-        </div>
-
-
-    </div>
-
-
-
-    <!-- =====================================================
-         LOADING OVERLAY
-    ====================================================== -->
-
-    <div class="loading-overlay hidden"
-        id="loading-overlay">
-
-
-        <div class="loading-content">
-
-
-            <div class="loading-spinner"></div>
-
-
-            <h3>
-                Scanning Market
-            </h3>
-
-
-            <p>
-                Analyzing stocks using technical indicators...
-            </p>
-
-
-            <div class="loading-progress">
-
-
-                <div class="loading-progress-bar"
-                    id="loading-progress-bar">
-
-
+            <!-- Detailed Analysis Panel for Selected Stock -->
+            <div class="card analysis-card id="detailed-analysis-view">
+                <div class="analysis-header">
+                    <h2 id="active-symbol">Select a Stock</h2>
+                    <div class="live-price-block">
+                        <span id="active-price" class="price-mono">₹0.00</span>
+                        <span id="active-change" class="change-tag text-neutral">0.00%</span>
+                    </div>
                 </div>
 
+                <!-- Consensus Gauge Container -->
+                <div class="consensus-meter-container">
+                    <div class="meter-label">Signal Consensus Strength</div>
+                    <div class="meter-bar-bg">
+                        <div id="consensus-fill" class="meter-bar-fill" style="width: 0%;"></div>
+                    </div>
+                    <div id="consensus-text" class="meter-verdict">No Active Data</div>
+                </div>
 
+                <!-- Technical Indicator Dashboard Grid -->
+                <div class="indicators-grid">
+                    <div class="indicator-tile" id="ind-rsi">
+                        <span class="ind-name">RSI (14)</span>
+                        <span class="ind-value">--</span>
+                        <span class="ind-signal badge-neutral">WAIT</span>
+                    </div>
+                    <div class="indicator-tile" id="ind-macd">
+                        <span class="ind-name">MACD (12, 26)</span>
+                        <span class="ind-value">--</span>
+                        <span class="ind-signal badge-neutral">WAIT</span>
+                    </div>
+                    <div class="indicator-tile" id="ind-ema">
+                        <span class="ind-name">EMA Cross (9/21)</span>
+                        <span class="ind-value">--</span>
+                        <span class="ind-signal badge-neutral">WAIT</span>
+                    </div>
+                    <div class="indicator-tile" id="ind-bb">
+                        <span class="ind-name">Bollinger Bands</span>
+                        <span class="ind-value">--</span>
+                        <span class="ind-signal badge-neutral">WAIT</span>
+                    </div>
+                </div>
+
+                <!-- Suggested Trade Levels Matrix -->
+                <div class="trade-matrix">
+                    <h3>Calculated Target Guide</h3>
+                    <div class="matrix-grid">
+                        <div class="matrix-box entry">
+                            <span class="matrix-label">Trigger Entry</span>
+                            <span id="calc-entry" class="matrix-value">₹0.00</span>
+                        </div>
+                        <div class="matrix-box target">
+                            <span class="matrix-label">Target Book</span>
+                            <span id="calc-target" class="matrix-value">₹0.00</span>
+                        </div>
+                        <div class="matrix-box stoploss">
+                            <span class="matrix-label">Hard Stoploss</span>
+                            <span id="calc-stoploss" class="matrix-value">₹0.00</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Right Column: Ranked Screener Tables -->
+        <section class="panel-right">
+            <div class="card screener-card">
+                <div class="screener-header">
+                    <h2>Momentum Buy Scan</h2>
+                    <span class="subtitle">Ranked by indicator consensus & day returns</span>
+                </div>
+                
+                <div class="table-responsive">
+                    <table class="screener-table" id="buy-screener-table">
+                        <thead>
+                            <tr>
+                                <th>Ticker</th>
+                                <th>Live Price</th>
+                                <th>24h Chg%</th>
+                                <th>Consensus</th>
+                                <th>Signal Strength</th>
+                            </tr>
+                        </thead>
+                        <tbody id="buy-screener-body">
+                            <!-- Populated dynamically via script.js -->
+                            <tr class="placeholder-row">
+                                <td colspan="5">Connect your access token to view intraday ranked heatmaps.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
 
+            <div class="card screener-card text-dimmed">
+                <div class="screener-header">
+                    <h2>Short / Sell Signals</h2>
+                </div>
+                <div class="table-responsive">
+                    <table class="screener-table" id="sell-screener-table">
+                        <thead>
+                            <tr>
+                                <th>Ticker</th>
+                                <th>Live Price</th>
+                                <th>24h Chg%</th>
+                                <th>Signal</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sell-screener-body">
+                            <!-- Populated dynamically via script.js -->
+                            <tr class="placeholder-row">
+                                <td colspan="4">No active bearish breakdowns monitored.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </section>
+        
+    </main>
 
-        </div>
-
-
-    </div>
-
-
-
-    <!-- =====================================================
-         TOAST NOTIFICATION
-    ====================================================== -->
-
-    <div class="toast-container"
-        id="toast-container">
-
-
-    </div>
-
-
-
-    <!-- =====================================================
-         JAVASCRIPT
-    ====================================================== -->
-
+    <!-- Essential Javascript Logic Initialization -->
     <script src="script.js"></script>
-
-
 </body>
-
 </html>
