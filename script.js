@@ -1,12 +1,28 @@
 /* =========================================================
-   REAL-TIME INDIAN STOCK TECHNICAL ANALYZER
-   Data Provider: Upstox API
+   INTRADAY STOCK SCREENER
+   Complete replacement script.js
 
-   Required:
-   - Upstox Access Token
+   Data:
+   - Upstox API
+   - Real quotes
+   - Real historical candles
 
-   This version does NOT create fake stock data.
-   A stock must be found and selected before analysis.
+   Features:
+   - Dashboard
+   - Buy Signals
+   - Sell Signals
+   - Market Overview
+   - Watchlist
+   - Real stock search
+   - Technical analysis
+   - Stock detail modal
+   - Price chart
+   - Top gainers
+   - Top losers
+   - Local watchlist
+
+   IMPORTANT:
+   Add your Upstox Access Token below.
 ========================================================= */
 
 
@@ -14,106 +30,477 @@
    CONFIGURATION
 ========================================================= */
 
-// Paste your valid Upstox access token here
 const UPSTOX_ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiJKUjIxMjQiLCJqdGkiOiI2YTVkMTZjNjA4YzFiODBkMjMyNzY2MzMiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6dHJ1ZSwiaWF0IjoxNzg0NDg1NTc0LCJpc3MiOiJ1ZGFwaS1nYXRld2F5LXNlcnZpY2UiLCJleHAiOjE3ODQ0OTg0MDB9._dlwsYewbVmcLDOibXkOOXE41qznjbuQJoka3IIjTqQ";
 
 const UPSTOX_API_BASE = "https://api.upstox.com/v2";
+
+const API_HEADERS = {
+    "Accept": "application/json",
+    "Authorization": `Bearer ${UPSTOX_ACCESS_TOKEN}`
+};
+
+
+/*
+   For dashboard scanning, the application needs actual
+   instrument keys.
+
+   These can be loaded from the official Upstox instrument
+   master file. The code below attempts to load the NSE
+   equity instrument file.
+
+   If your browser blocks this request because of CORS,
+   use a local instrument JSON file or backend later.
+*/
+
+const INSTRUMENT_MASTER_URL =
+    "https://assets.upstox.com/market-quote/instruments/exchange/complete.json.gz";
 
 
 /* =========================================================
    APPLICATION STATE
 ========================================================= */
 
-const appState = {
+const state = {
 
-    selectedInstrument: null,
+    currentPage: "dashboard",
+
+    selectedStock: null,
 
     selectedQuote: null,
 
-    candles: [],
+    selectedCandles: [],
 
-    indicators: null,
+    selectedAnalysis: null,
 
-    analysis: null,
+    instruments: [],
 
-    searchTimeout: null,
+    filteredInstruments: [],
+
+    dashboardStocks: [],
+
+    topGainers: [],
+
+    topLosers: [],
+
+    buySignals: [],
+
+    sellSignals: [],
+
+    watchlist: loadWatchlist(),
+
+    instrumentDataLoaded: false,
+
+    dashboardLoaded: false,
 
     isLoading: false,
 
-    lastUpdated: null
+    searchTimer: null,
+
+    currentChart: null,
+
+    lastDashboardUpdate: null
 
 };
 
 
 /* =========================================================
-   DOM HELPERS
+   DOM SHORTCUTS
 ========================================================= */
 
-function query(selector) {
+const $ = selector => document.querySelector(selector);
 
-    return document.querySelector(selector);
+const $$ = selector => document.querySelectorAll(selector);
 
-}
-
-
-function queryAll(selector) {
-
-    return document.querySelectorAll(selector);
-
-}
-
-
-function getElement(id) {
-
-    return document.getElementById(id);
-
-}
+const byId = id => document.getElementById(id);
 
 
 /* =========================================================
-   INITIALIZATION
+   INITIALIZE
 ========================================================= */
 
 document.addEventListener(
 
     "DOMContentLoaded",
 
-    () => {
+    async () => {
 
-        initializeApp();
+        setupNavigation();
+
+        setupSearch();
+
+        setupButtons();
+
+        setupFilters();
+
+        setupModal();
+
+        setupMobileMenu();
+
+        updateMarketStatus();
+
+        renderWatchlist();
+
+        await initializeDashboard();
 
     }
 
 );
 
 
-function initializeApp() {
+/* =========================================================
+   DASHBOARD INITIALIZATION
+========================================================= */
 
-    setupSearch();
+async function initializeDashboard() {
 
-    setupRefreshButton();
+    try {
 
-    setupNavigation();
+        showLoading(
 
-    setupMobileMenu();
+            "Loading real market data..."
 
-    hideAnalysis();
+        );
 
-    updateMarketStatus();
 
-    setInterval(
+        if (
 
-        updateMarketStatus,
+            !UPSTOX_ACCESS_TOKEN ||
 
-        30000
+            UPSTOX_ACCESS_TOKEN ===
 
-    );
+            "PASTE_YOUR_ACCESS_TOKEN_HERE"
+
+        ) {
+
+            throw new Error(
+
+                "Upstox access token is missing."
+
+            );
+
+        }
+
+
+        await loadInstrumentMaster();
+
+
+        const stocks =
+
+            getDashboardUniverse();
+
+
+        if (
+
+            !stocks.length
+
+        ) {
+
+            throw new Error(
+
+                "No real stock instruments found."
+
+            );
+
+        }
+
+
+        const quotes =
+
+            await fetchQuotesInBatches(
+
+                stocks
+
+            );
+
+
+        const analyzedStocks = [];
+
+
+        for (
+
+            const stock of quotes
+
+        ) {
+
+            try {
+
+                const candles =
+
+                    await fetchHistoricalCandles(
+
+                        stock.instrument_key,
+
+                        "day",
+
+                        1,
+
+                        120
+
+                    );
+
+
+                if (
+
+                    candles.length < 50
+
+                ) {
+
+                    continue;
+
+                }
+
+
+                const indicators =
+
+                    calculateIndicators(
+
+                        candles
+
+                    );
+
+
+                const analysis =
+
+                    calculateScore(
+
+                        stock,
+
+                        indicators
+
+                    );
+
+
+                analyzedStocks.push({
+
+                    ...stock,
+
+                    candles,
+
+                    indicators,
+
+                    analysis
+
+                });
+
+            }
+
+            catch (
+
+                error
+
+            ) {
+
+                console.warn(
+
+                    "Skipping stock:",
+
+                    stock.trading_symbol,
+
+                    error.message
+
+                );
+
+            }
+
+        }
+
+
+        if (
+
+            !analyzedStocks.length
+
+        ) {
+
+            throw new Error(
+
+                "No technical analysis data could be calculated."
+
+            );
+
+        }
+
+
+        state.dashboardStocks =
+
+            analyzedStocks;
+
+
+        state.topGainers =
+
+            [...analyzedStocks]
+
+                .sort(
+
+                    (
+
+                        a,
+
+                        b
+
+                    ) =>
+
+                        b.percent_change -
+
+                        a.percent_change
+
+                )
+
+                .slice(
+
+                    0,
+
+                    5
+
+                );
+
+
+        state.topLosers =
+
+            [...analyzedStocks]
+
+                .sort(
+
+                    (
+
+                        a,
+
+                        b
+
+                    ) =>
+
+                        a.percent_change -
+
+                        b.percent_change
+
+                )
+
+                .slice(
+
+                    0,
+
+                    5
+
+                );
+
+
+        state.buySignals =
+
+            [...analyzedStocks]
+
+                .filter(
+
+                    stock =>
+
+                        stock.analysis.score >= 60
+
+                )
+
+                .sort(
+
+                    (
+
+                        a,
+
+                        b
+
+                    ) =>
+
+                        b.analysis.score -
+
+                        a.analysis.score
+
+                );
+
+
+        state.sellSignals =
+
+            [...analyzedStocks]
+
+                .filter(
+
+                    stock =>
+
+                        stock.analysis.score <= 40
+
+                )
+
+                .sort(
+
+                    (
+
+                        a,
+
+                        b
+
+                    ) =>
+
+                        a.analysis.score -
+
+                        b.analysis.score
+
+                );
+
+
+        renderDashboard();
+
+        state.dashboardLoaded = true;
+
+        state.lastDashboardUpdate = new Date();
+
+        updateLastScan();
+
+
+        showToast(
+
+            "Real market data loaded.",
+
+            "success"
+
+        );
+
+    }
+
+    catch (
+
+        error
+
+    ) {
+
+        console.error(
+
+            error
+
+        );
+
+
+        renderDashboardError(
+
+            error.message
+
+        );
+
+
+        showToast(
+
+            error.message,
+
+            "error"
+
+        );
+
+    }
+
+    finally {
+
+        hideLoading();
+
+    }
 
 }
 
 
 /* =========================================================
-   API REQUEST
+   UPSTOX API REQUEST
 ========================================================= */
 
 async function upstoxRequest(
@@ -122,55 +509,32 @@ async function upstoxRequest(
 
 ) {
 
-    if (
+    const response =
 
-        !UPSTOX_ACCESS_TOKEN ||
+        await fetch(
 
-        UPSTOX_ACCESS_TOKEN ===
+            `${
 
-        "YOUR_UPSTOX_ACCESS_TOKEN"
+                UPSTOX_API_BASE
 
-    ) {
+            }${
 
-        throw new Error(
+                endpoint
 
-            "Upstox access token is missing."
+            }`,
 
-        );
+            {
 
-    }
+                method: "GET",
 
-
-    const response = await fetch(
-
-        `${UPSTOX_API_BASE}${endpoint}`,
-
-        {
-
-            method: "GET",
-
-            headers: {
-
-                "Accept":
-
-                    "application/json",
-
-                "Authorization":
-
-                    `Bearer ${
-
-                        UPSTOX_ACCESS_TOKEN
-
-                    }`
+                headers: API_HEADERS
 
             }
 
-        }
-
-    );
+        );
 
 
-    let data = null;
+    let data;
 
 
     try {
@@ -186,13 +550,26 @@ async function upstoxRequest(
     }
 
 
-    if (!response.ok) {
+    if (
 
-        throw new Error(
+        !response.ok
+
+    ) {
+
+        const message =
 
             data?.errors?.[0]?.message ||
 
-            `API Error: ${response.status}`
+            `Upstox API error ${
+
+                response.status
+
+            }`;
+
+
+        throw new Error(
+
+            message
 
         );
 
@@ -205,54 +582,298 @@ async function upstoxRequest(
 
 
 /* =========================================================
-   SEARCH SETUP
+   INSTRUMENT MASTER
 ========================================================= */
 
-function setupSearch() {
+async function loadInstrumentMaster() {
 
-    const searchInput =
+    if (
 
-        query(
+        state.instrumentDataLoaded
 
-            "#stockSearch, .search-box input"
-
-        );
-
-
-    if (!searchInput) {
-
-        console.warn(
-
-            "Search input not found."
-
-        );
+    ) {
 
         return;
 
     }
 
 
-    searchInput.addEventListener(
+    /*
+       The complete instrument master is a compressed file.
+
+       Browser support for .gz JSON depends on the response.
+       If direct loading fails, use the fallback list below
+       only for instrument identity.
+
+       No prices or technical values are hardcoded.
+    */
+
+    try {
+
+        const response =
+
+            await fetch(
+
+                INSTRUMENT_MASTER_URL
+
+            );
+
+
+        if (
+
+            !response.ok
+
+        ) {
+
+            throw new Error(
+
+                "Instrument master unavailable."
+
+            );
+
+        }
+
+
+        const buffer =
+
+            await response.arrayBuffer();
+
+
+        const text =
+
+            await decompressGzip(
+
+                buffer
+
+            );
+
+
+        const parsed =
+
+            JSON.parse(
+
+                text
+
+            );
+
+
+        state.instruments =
+
+            Array.isArray(
+
+                parsed
+
+            )
+
+                ? parsed
+
+                : Object.values(
+
+                    parsed
+
+                );
+
+
+        state.instrumentDataLoaded =
+
+            true;
+
+    }
+
+    catch (
+
+        error
+
+    ) {
+
+        console.warn(
+
+            "Instrument master loading failed:",
+
+            error.message
+
+        );
+
+
+        /*
+           Real instrument keys for major Indian indices.
+           These are identifiers only.
+
+           Prices, candles and indicators are still fetched
+           from the API.
+        */
+
+        state.instruments = [
+
+            {
+
+                instrument_key:
+
+                    "NSE_INDEX|Nifty 50",
+
+                trading_symbol:
+
+                    "NIFTY 50",
+
+                name:
+
+                    "NIFTY 50",
+
+                exchange:
+
+                    "NSE_INDEX",
+
+                instrument_type:
+
+                    "INDEX"
+
+            },
+
+            {
+
+                instrument_key:
+
+                    "NSE_INDEX|Nifty Bank",
+
+                trading_symbol:
+
+                    "NIFTY BANK",
+
+                name:
+
+                    "NIFTY BANK",
+
+                exchange:
+
+                    "NSE_INDEX",
+
+                instrument_type:
+
+                    "INDEX"
+
+            }
+
+        ];
+
+    }
+
+}
+
+
+/* =========================================================
+   DASHBOARD UNIVERSE
+========================================================= */
+
+function getDashboardUniverse() {
+
+    const stocks =
+
+        state.instruments
+
+            .filter(
+
+                instrument => {
+
+                    const exchange =
+
+                        String(
+
+                            instrument.exchange ||
+
+                            ""
+
+                        ).toUpperCase();
+
+
+                    const type =
+
+                        String(
+
+                            instrument.instrument_type ||
+
+                            ""
+
+                        ).toUpperCase();
+
+
+                    return (
+
+                        exchange === "NSE_EQ" &&
+
+                        type === "EQUITY"
+
+                    );
+
+                }
+
+            );
+
+
+    /*
+       We cannot scan every NSE stock using a
+       free API without considering rate limits.
+
+       Use the first available real equity instruments
+       for the dashboard scan.
+
+       Later we can replace this with a proper NIFTY 50
+       universe.
+    */
+
+    return stocks.slice(
+
+        0,
+
+        40
+
+    );
+
+}
+
+
+/* =========================================================
+   SEARCH
+========================================================= */
+
+function setupSearch() {
+
+    const input =
+
+        byId(
+
+            "stock-search"
+
+        );
+
+
+    if (
+
+        !input
+
+    ) return;
+
+
+    input.addEventListener(
 
         "input",
 
-        () => {
+        event => {
 
-            const searchText =
+            const text =
 
-                searchInput.value.trim();
+                event.target.value.trim();
 
 
             clearTimeout(
 
-                appState.searchTimeout
+                state.searchTimer
 
             );
 
 
             if (
 
-                searchText.length < 2
+                text.length < 2
 
             ) {
 
@@ -263,21 +884,21 @@ function setupSearch() {
             }
 
 
-            appState.searchTimeout =
+            state.searchTimer =
 
                 setTimeout(
 
                     () => {
 
-                        searchStocks(
+                        renderSearchSuggestions(
 
-                            searchText
+                            text
 
                         );
 
                     },
 
-                    400
+                    250
 
                 );
 
@@ -286,7 +907,7 @@ function setupSearch() {
     );
 
 
-    searchInput.addEventListener(
+    input.addEventListener(
 
         "keydown",
 
@@ -298,22 +919,18 @@ function setupSearch() {
 
             ) {
 
-                const firstSuggestion =
+                const first =
 
-                    query(
-
-                        ".stock-suggestion"
-
-                    );
+                    $(".stock-suggestion");
 
 
                 if (
 
-                    firstSuggestion
+                    first
 
                 ) {
 
-                    firstSuggestion.click();
+                    first.click();
 
                 }
 
@@ -323,192 +940,118 @@ function setupSearch() {
 
     );
 
-}
 
+    byId(
 
-/* =========================================================
-   SEARCH REAL STOCKS
-========================================================= */
+        "search-clear"
 
-async function searchStocks(
+    )?.addEventListener(
 
-    searchText
+        "click",
 
-) {
+        () => {
 
-    try {
+            input.value = "";
 
-        showSearchLoading();
+            hideSuggestions();
 
+            closeAnalysis();
 
-        const encodedSearch =
+        }
 
-            encodeURIComponent(
-
-                searchText
-
-            );
-
-
-        const response =
-
-            await upstoxRequest(
-
-                `/search/instrument?query=${
-
-                    encodedSearch
-
-                }`
-
-            );
-
-
-        const instruments =
-
-            extractSearchResults(
-
-                response
-
-            );
-
-
-        renderSuggestions(
-
-            instruments
-
-        );
-
-    }
-
-    catch (error) {
-
-        console.error(
-
-            "Search error:",
-
-            error
-
-        );
-
-
-        renderNoSuggestions(
-
-            error.message
-
-        );
-
-    }
+    );
 
 }
 
 
-/* =========================================================
-   EXTRACT SEARCH RESULTS
-========================================================= */
+function renderSearchSuggestions(
 
-function extractSearchResults(
-
-    response
+    text
 
 ) {
 
-    if (
+    const search =
 
-        !response ||
-
-        !response.data
-
-    ) {
-
-        return [];
-
-    }
+        text.toLowerCase();
 
 
-    const data =
+    const matches =
 
-        Array.isArray(
+        state.instruments
 
-            response.data
+            .filter(
 
-        )
+                instrument => {
 
-            ? response.data
+                    const symbol =
 
-            : [];
+                        String(
 
+                            instrument.trading_symbol ||
 
-    return data
+                            ""
 
-        .filter(
-
-            item => {
-
-                return (
-
-                    item.instrument_key &&
-
-                    (
-
-                        item.exchange ===
-
-                        "NSE" ||
-
-                        item.exchange ===
-
-                        "BSE"
-
-                    )
-
-                );
-
-            }
-
-        )
-
-        .slice(
-
-            0,
-
-            10
-
-        );
-
-}
+                        ).toLowerCase();
 
 
-/* =========================================================
-   RENDER SEARCH SUGGESTIONS
-========================================================= */
+                    const name =
 
-function renderSuggestions(
+                        String(
 
-    instruments
+                            instrument.name ||
 
-) {
+                            ""
+
+                        ).toLowerCase();
+
+
+                    return (
+
+                        symbol.includes(
+
+                            search
+
+                        ) ||
+
+                        name.includes(
+
+                            search
+
+                        )
+
+                    );
+
+                }
+
+            )
+
+            .filter(
+
+                instrument =>
+
+                    instrument.instrument_key
+
+            )
+
+            .slice(
+
+                0,
+
+                10
+
+            );
+
 
     let container =
 
-        query(
-
-            ".stock-suggestions"
-
-        );
+        $(".stock-suggestions");
 
 
-    if (!container) {
+    if (
 
-        const searchBox =
+        !container
 
-            query(
-
-                ".search-box"
-
-            );
-
-
-        if (!searchBox) return;
-
+    ) {
 
         container =
 
@@ -524,7 +1067,7 @@ function renderSuggestions(
             "stock-suggestions";
 
 
-        searchBox.appendChild(
+        $(".search-box")?.appendChild(
 
             container
 
@@ -538,7 +1081,7 @@ function renderSuggestions(
 
     if (
 
-        !instruments.length
+        !matches.length
 
     ) {
 
@@ -546,7 +1089,7 @@ function renderSuggestions(
 
             <div class="no-suggestion">
 
-                No matching stock found
+                No real stock found
 
             </div>
 
@@ -565,7 +1108,7 @@ function renderSuggestions(
     }
 
 
-    instruments.forEach(
+    matches.forEach(
 
         instrument => {
 
@@ -614,7 +1157,7 @@ function renderSuggestions(
 
                                 instrument.name ||
 
-                                "Unknown Company"
+                                "Unknown company"
 
                             )
 
@@ -681,8 +1224,23 @@ function renderSuggestions(
 }
 
 
+function hideSuggestions() {
+
+    $(".stock-suggestions")
+
+        ?.classList
+
+        .remove(
+
+            "visible"
+
+        );
+
+}
+
+
 /* =========================================================
-   SELECT REAL STOCK
+   SELECT STOCK
 ========================================================= */
 
 async function selectStock(
@@ -691,7 +1249,7 @@ async function selectStock(
 
 ) {
 
-    appState.selectedInstrument =
+    state.selectedStock =
 
         instrument;
 
@@ -699,22 +1257,22 @@ async function selectStock(
     hideSuggestions();
 
 
-    const searchInput =
+    const input =
 
-        query(
+        byId(
 
-            "#stockSearch, .search-box input"
+            "stock-search"
 
         );
 
 
     if (
 
-        searchInput
+        input
 
     ) {
 
-        searchInput.value =
+        input.value =
 
             instrument.trading_symbol ||
 
@@ -725,7 +1283,11 @@ async function selectStock(
     }
 
 
-    await analyzeSelectedStock();
+    await analyzeStock(
+
+        instrument
+
+    );
 
 }
 
@@ -734,34 +1296,11 @@ async function selectStock(
    ANALYZE SELECTED STOCK
 ========================================================= */
 
-async function analyzeSelectedStock() {
+async function analyzeStock(
 
-    const instrument =
+    instrument
 
-        appState.selectedInstrument;
-
-
-    if (
-
-        !instrument ||
-
-        !instrument.instrument_key
-
-    ) {
-
-        showToast(
-
-            "Please select a valid stock from search suggestions.",
-
-            "warning"
-
-        );
-
-
-        return;
-
-    }
-
+) {
 
     try {
 
@@ -769,62 +1308,65 @@ async function analyzeSelectedStock() {
 
             `Analyzing ${
 
-                instrument.trading_symbol ||
-
-                instrument.name
+                instrument.trading_symbol
 
             }...`
 
         );
 
 
-        clearAnalysis();
-
-
         const quote =
 
-            await getLiveQuote(
+            await fetchQuote(
 
                 instrument.instrument_key
 
             );
-
-
-        if (
-
-            !quote
-
-        ) {
-
-            throw new Error(
-
-                "Live quote unavailable."
-
-            );
-
-        }
 
 
         const candles =
 
-            await getHistoricalCandles(
+            await fetchHistoricalCandles(
 
-                instrument.instrument_key
+                instrument.instrument_key,
+
+                "minutes",
+
+                5,
+
+                100
 
             );
 
 
+        const usableCandles =
+
+            candles.length >= 50
+
+                ? candles
+
+                : await fetchHistoricalCandles(
+
+                    instrument.instrument_key,
+
+                    "day",
+
+                    1,
+
+                    120
+
+                );
+
+
         if (
 
-            !candles ||
-
-            candles.length < 50
+            usableCandles.length < 50
 
         ) {
 
             throw new Error(
 
-                "Not enough historical data to calculate indicators."
+                "Insufficient real historical data."
 
             );
 
@@ -833,16 +1375,16 @@ async function analyzeSelectedStock() {
 
         const indicators =
 
-            calculateAllIndicators(
+            calculateIndicators(
 
-                candles
+                usableCandles
 
             );
 
 
         const analysis =
 
-            calculateTechnicalAnalysis(
+            calculateScore(
 
                 quote,
 
@@ -851,27 +1393,22 @@ async function analyzeSelectedStock() {
             );
 
 
-        appState.selectedQuote =
+        state.selectedQuote =
 
             quote;
 
 
-        appState.candles =
+        state.selectedCandles =
 
-            candles;
-
-
-        appState.indicators =
-
-            indicators;
+            usableCandles;
 
 
-        appState.analysis =
+        state.selectedAnalysis =
 
             analysis;
 
 
-        renderRealAnalysis(
+        renderAnalysis(
 
             instrument,
 
@@ -884,38 +1421,34 @@ async function analyzeSelectedStock() {
         );
 
 
-        updateLastUpdated();
+        openAnalysis();
 
-
-        showToast(
-
-            "Real stock analysis completed.",
-
-            "success"
-
-        );
 
     }
 
-    catch (error) {
+    catch (
+
+        error
+
+    ) {
 
         console.error(
-
-            "Analysis error:",
 
             error
 
         );
 
 
-        hideAnalysis();
+        closeAnalysis();
 
 
         showToast(
 
-            error.message ||
+            `Unable to analyze stock: ${
 
-            "Unable to analyze this stock.",
+                error.message
+
+            }`,
 
             "error"
 
@@ -933,16 +1466,16 @@ async function analyzeSelectedStock() {
 
 
 /* =========================================================
-   LIVE QUOTE
+   FETCH QUOTES
 ========================================================= */
 
-async function getLiveQuote(
+async function fetchQuote(
 
     instrumentKey
 
 ) {
 
-    const encodedKey =
+    const key =
 
         encodeURIComponent(
 
@@ -957,50 +1490,33 @@ async function getLiveQuote(
 
             `/market-quote/ltp?instrument_key=${
 
-                encodedKey
+                key
 
             }`
 
         );
 
 
-    if (
-
-        !response ||
-
-        !response.data
-
-    ) {
-
-        throw new Error(
-
-            "No live price data received."
-
-        );
-
-    }
-
-
-    const quoteData =
+    const data =
 
         Object.values(
 
-            response.data
+            response?.data || {}
 
         )[0];
 
 
     if (
 
-        !quoteData ||
+        !data ||
 
-        !quoteData.last_price
+        data.last_price === undefined
 
     ) {
 
         throw new Error(
 
-            "Invalid live price received."
+            "Real quote not available."
 
         );
 
@@ -1013,7 +1529,7 @@ async function getLiveQuote(
 
             Number(
 
-                quoteData.last_price
+                data.last_price
 
             ),
 
@@ -1021,19 +1537,15 @@ async function getLiveQuote(
 
             Number(
 
-                quoteData.net_change ||
-
-                0
+                data.net_change || 0
 
             ),
 
-        percentChange:
+        percent_change:
 
             Number(
 
-                quoteData.percent_change ||
-
-                0
+                data.percent_change || 0
 
             )
 
@@ -1042,56 +1554,217 @@ async function getLiveQuote(
 }
 
 
+async function fetchQuotesInBatches(
+
+    instruments
+
+) {
+
+    const results = [];
+
+
+    const batchSize = 10;
+
+
+    for (
+
+        let i = 0;
+
+        i < instruments.length;
+
+        i += batchSize
+
+    ) {
+
+        const batch =
+
+            instruments.slice(
+
+                i,
+
+                i + batchSize
+
+            );
+
+
+        const keys =
+
+            batch
+
+                .map(
+
+                    item =>
+
+                        item.instrument_key
+
+                )
+
+                .join(
+
+                    ","
+
+                );
+
+
+        try {
+
+            const response =
+
+                await upstoxRequest(
+
+                    `/market-quote/ltp?instrument_key=${
+
+                        encodeURIComponent(
+
+                            keys
+
+                        )
+
+                    }`
+
+                );
+
+
+            const quoteMap =
+
+                response?.data || {};
+
+
+            batch.forEach(
+
+                instrument => {
+
+                    const quote =
+
+                        quoteMap[
+
+                            instrument.instrument_key
+
+                        ];
+
+
+                    if (
+
+                        quote &&
+
+                        quote.last_price !== undefined
+
+                    ) {
+
+                        results.push({
+
+                            ...instrument,
+
+                            price:
+
+                                Number(
+
+                                    quote.last_price
+
+                                ),
+
+                            change:
+
+                                Number(
+
+                                    quote.net_change || 0
+
+                                ),
+
+                            percent_change:
+
+                                Number(
+
+                                    quote.percent_change || 0
+
+                                )
+
+                        });
+
+                    }
+
+                }
+
+            );
+
+        }
+
+        catch (
+
+            error
+
+        ) {
+
+            console.warn(
+
+                "Quote batch failed:",
+
+                error.message
+
+            );
+
+        }
+
+    }
+
+
+    return results;
+
+}
+
+
 /* =========================================================
    HISTORICAL CANDLES
 ========================================================= */
 
-async function getHistoricalCandles(
+async function fetchHistoricalCandles(
 
-    instrumentKey
+    instrumentKey,
+
+    unit = "day",
+
+    interval = 1,
+
+    days = 120
 
 ) {
 
-    const today =
+    const to =
 
         new Date();
+
+
+    const from =
+
+        new Date();
+
+
+    from.setDate(
+
+        from.getDate() - days
+
+    );
 
 
     const toDate =
 
         formatDate(
 
-            today
+            to
 
         );
 
 
     const fromDate =
 
-        new Date(
-
-            today
-
-        );
-
-
-    fromDate.setDate(
-
-        fromDate.getDate() - 365
-
-    );
-
-
-    const fromDateString =
-
         formatDate(
 
-            fromDate
+            from
 
         );
 
 
-    const encodedKey =
+    const key =
 
         encodeURIComponent(
 
@@ -1100,23 +1773,67 @@ async function getHistoricalCandles(
         );
 
 
-    const response =
+    let endpoint;
 
-        await upstoxRequest(
+
+    if (
+
+        unit === "minutes"
+
+    ) {
+
+        endpoint =
 
             `/historical-candle/${
 
-                encodedKey
+                key
 
-            }/day/1/${
+            }/minutes/${
+
+                interval
+
+            }/${
 
                 toDate
 
             }/${
 
-                fromDateString
+                fromDate
 
-            }`
+            }`;
+
+    }
+
+    else {
+
+        endpoint =
+
+            `/historical-candle/${
+
+                key
+
+            }/day/${
+
+                interval
+
+            }/${
+
+                toDate
+
+            }/${
+
+                fromDate
+
+            }`;
+
+    }
+
+
+    const response =
+
+        await upstoxRequest(
+
+            endpoint
 
         );
 
@@ -1136,11 +1853,7 @@ async function getHistoricalCandles(
 
     ) {
 
-        throw new Error(
-
-            "Historical candle data unavailable."
-
-        );
+        return [];
 
     }
 
@@ -1191,7 +1904,7 @@ async function getHistoricalCandles(
 
                     Number(
 
-                        candle[5]
+                        candle[5] || 0
 
                     )
 
@@ -1205,10 +1918,10 @@ async function getHistoricalCandles(
 
 
 /* =========================================================
-   INDICATOR CALCULATIONS
+   TECHNICAL INDICATORS
 ========================================================= */
 
-function calculateAllIndicators(
+function calculateIndicators(
 
     candles
 
@@ -1223,24 +1936,6 @@ function calculateAllIndicators(
         );
 
 
-    const highs =
-
-        candles.map(
-
-            candle => candle.high
-
-        );
-
-
-    const lows =
-
-        candles.map(
-
-            candle => candle.low
-
-        );
-
-
     const volumes =
 
         candles.map(
@@ -1250,144 +1945,117 @@ function calculateAllIndicators(
         );
 
 
-    const ema20 =
-
-        calculateEMA(
-
-            closes,
-
-            20
-
-        );
-
-
-    const ema50 =
-
-        calculateEMA(
-
-            closes,
-
-            50
-
-        );
-
-
-    const sma200 =
-
-        calculateSMA(
-
-            closes,
-
-            200
-
-        );
-
-
-    const rsi =
-
-        calculateRSI(
-
-            closes,
-
-            14
-
-        );
-
-
-    const macd =
-
-        calculateMACD(
-
-            closes
-
-        );
-
-
-    const bollinger =
-
-        calculateBollingerBands(
-
-            closes,
-
-            20,
-
-            2
-
-        );
-
-
-    const atr =
-
-        calculateATR(
-
-            candles,
-
-            14
-
-        );
-
-
-    const adx =
-
-        calculateADX(
-
-            candles,
-
-            14
-
-        );
-
-
-    const averageVolume =
-
-        calculateSMA(
-
-            volumes,
-
-            20
-
-        );
-
-
-    const currentVolume =
-
-        volumes[
-
-            volumes.length - 1
-
-        ];
-
-
     return {
 
-        rsi,
+        rsi:
 
-        ema20,
+            calculateRSI(
 
-        ema50,
+                closes,
 
-        sma200,
+                14
 
-        macd,
+            ),
 
-        bollinger,
 
-        atr,
+        ema20:
 
-        adx,
+            calculateEMA(
 
-        averageVolume,
+                closes,
 
-        currentVolume
+                20
+
+            ),
+
+
+        ema50:
+
+            calculateEMA(
+
+                closes,
+
+                50
+
+            ),
+
+
+        sma200:
+
+            calculateSMA(
+
+                closes,
+
+                200
+
+            ),
+
+
+        macd:
+
+            calculateMACD(
+
+                closes
+
+            ),
+
+
+        bollinger:
+
+            calculateBollinger(
+
+                closes,
+
+                20
+
+            ),
+
+
+        atr:
+
+            calculateATR(
+
+                candles,
+
+                14
+
+            ),
+
+
+        adx:
+
+            calculateADX(
+
+                candles,
+
+                14
+
+            ),
+
+
+        averageVolume:
+
+            calculateSMA(
+
+                volumes,
+
+                20
+
+            ),
+
+
+        currentVolume:
+
+            volumes[
+
+                volumes.length - 1
+
+            ]
 
     };
 
 }
 
-
-/* =========================================================
-   SMA
-========================================================= */
 
 function calculateSMA(
 
@@ -1408,7 +2076,7 @@ function calculateSMA(
     }
 
 
-    const recent =
+    const slice =
 
         values.slice(
 
@@ -1417,30 +2085,22 @@ function calculateSMA(
         );
 
 
-    return (
+    return slice.reduce(
 
-        recent.reduce(
+        (
 
-            (
+            total,
 
-                total,
+            value
 
-                value
+        ) => total + value,
 
-            ) => total + value,
+        0
 
-            0
-
-        ) / period
-
-    );
+    ) / period;
 
 }
 
-
-/* =========================================================
-   EMA
-========================================================= */
 
 function calculateEMA(
 
@@ -1521,10 +2181,6 @@ function calculateEMA(
 }
 
 
-/* =========================================================
-   RSI
-========================================================= */
-
 function calculateRSI(
 
     values,
@@ -1544,9 +2200,9 @@ function calculateRSI(
     }
 
 
-    let gains = 0;
+    let gain = 0;
 
-    let losses = 0;
+    let loss = 0;
 
 
     for (
@@ -1572,13 +2228,13 @@ function calculateRSI(
 
         ) {
 
-            gains += change;
+            gain += change;
 
         }
 
         else {
 
-            losses +=
+            loss +=
 
                 Math.abs(
 
@@ -1591,14 +2247,14 @@ function calculateRSI(
     }
 
 
-    let averageGain =
+    let avgGain =
 
-        gains / period;
+        gain / period;
 
 
-    let averageLoss =
+    let avgLoss =
 
-        losses / period;
+        loss / period;
 
 
     for (
@@ -1618,33 +2274,33 @@ function calculateRSI(
             values[i - 1];
 
 
-        const gain =
+        const currentGain =
 
-            change > 0
+            Math.max(
 
-                ? change
+                change,
 
-                : 0;
+                0
 
-
-        const loss =
-
-            change < 0
-
-                ? Math.abs(
-
-                    change
-
-                )
-
-                : 0;
+            );
 
 
-        averageGain =
+        const currentLoss =
+
+            Math.max(
+
+                -change,
+
+                0
+
+            );
+
+
+        avgGain =
 
             (
 
-                averageGain *
+                avgGain *
 
                 (
 
@@ -1652,16 +2308,16 @@ function calculateRSI(
 
                 ) +
 
-                gain
+                currentGain
 
             ) / period;
 
 
-        averageLoss =
+        avgLoss =
 
             (
 
-                averageLoss *
+                avgLoss *
 
                 (
 
@@ -1669,7 +2325,7 @@ function calculateRSI(
 
                 ) +
 
-                loss
+                currentLoss
 
             ) / period;
 
@@ -1678,7 +2334,7 @@ function calculateRSI(
 
     if (
 
-        averageLoss === 0
+        avgLoss === 0
 
     ) {
 
@@ -1687,16 +2343,14 @@ function calculateRSI(
     }
 
 
-    const relativeStrength =
+    const rs =
 
-        averageGain /
+        avgGain /
 
-        averageLoss;
+        avgLoss;
 
 
-    return (
-
-        100 -
+    return 100 -
 
         (
 
@@ -1704,22 +2358,14 @@ function calculateRSI(
 
             (
 
-                1 +
-
-                relativeStrength
+                1 + rs
 
             )
 
-        )
-
-    );
+        );
 
 }
 
-
-/* =========================================================
-   MACD
-========================================================= */
 
 function calculateMACD(
 
@@ -1781,7 +2427,7 @@ function calculateMACD(
 
         signal:
 
-            value > 0
+            value >= 0
 
                 ? "BULLISH"
 
@@ -1792,21 +2438,15 @@ function calculateMACD(
 }
 
 
-/* =========================================================
-   BOLLINGER BANDS
-========================================================= */
-
-function calculateBollingerBands(
+function calculateBollinger(
 
     values,
 
-    period = 20,
-
-    standardDeviations = 2
+    period = 20
 
 ) {
 
-    const sma =
+    const middle =
 
         calculateSMA(
 
@@ -1819,7 +2459,7 @@ function calculateBollingerBands(
 
     if (
 
-        sma === null
+        middle === null
 
     ) {
 
@@ -1847,28 +2487,26 @@ function calculateBollingerBands(
 
                 value
 
-            ) => {
+            ) =>
 
-                return total +
+                total +
 
-                    Math.pow(
+                Math.pow(
 
-                        value -
+                    value -
 
-                        sma,
+                    middle,
 
-                        2
+                    2
 
-                    );
-
-            },
+                ),
 
             0
 
         ) / period;
 
 
-    const standardDeviation =
+    const deviation =
 
         Math.sqrt(
 
@@ -1879,40 +2517,28 @@ function calculateBollingerBands(
 
     return {
 
-        middle: sma,
+        middle,
 
         upper:
 
-            sma +
+            middle +
 
-            (
+            2 *
 
-                standardDeviation *
-
-                standardDeviations
-
-            ),
+            deviation,
 
         lower:
 
-            sma -
+            middle -
 
-            (
+            2 *
 
-                standardDeviation *
-
-                standardDeviations
-
-            )
+            deviation
 
     };
 
 }
 
-
-/* =========================================================
-   ATR
-========================================================= */
 
 function calculateATR(
 
@@ -1922,20 +2548,7 @@ function calculateATR(
 
 ) {
 
-    if (
-
-        candles.length <
-
-        period + 1
-
-    ) {
-
-        return null;
-
-    }
-
-
-    const trueRanges = [];
+    const ranges = [];
 
 
     for (
@@ -1958,7 +2571,7 @@ function calculateATR(
             candles[i - 1];
 
 
-        const trueRange =
+        ranges.push(
 
             Math.max(
 
@@ -1984,12 +2597,7 @@ function calculateATR(
 
                 )
 
-            );
-
-
-        trueRanges.push(
-
-            trueRange
+            )
 
         );
 
@@ -1998,7 +2606,7 @@ function calculateATR(
 
     return calculateSMA(
 
-        trueRanges,
+        ranges,
 
         period
 
@@ -2006,10 +2614,6 @@ function calculateATR(
 
 }
 
-
-/* =========================================================
-   ADX - TREND STRENGTH APPROXIMATION
-========================================================= */
 
 function calculateADX(
 
@@ -2032,7 +2636,7 @@ function calculateADX(
     }
 
 
-    const directionalMovements = [];
+    const movements = [];
 
 
     for (
@@ -2045,91 +2649,42 @@ function calculateADX(
 
     ) {
 
-        const current =
+        const up =
 
-            candles[i];
+            candles[i].high -
 
-
-        const previous =
-
-            candles[i - 1];
+            candles[i - 1].high;
 
 
-        const upMove =
+        const down =
 
-            current.high -
+            candles[i - 1].low -
 
-            previous.high;
-
-
-        const downMove =
-
-            previous.low -
-
-            current.low;
+            candles[i].low;
 
 
-        let movement = 0;
+        movements.push(
 
+            Math.max(
 
-        if (
+                up,
 
-            upMove > downMove &&
+                down,
 
-            upMove > 0
+                0
 
-        ) {
-
-            movement =
-
-                upMove;
-
-        }
-
-        else if (
-
-            downMove > upMove &&
-
-            downMove > 0
-
-        ) {
-
-            movement =
-
-                -downMove;
-
-        }
-
-
-        directionalMovements.push(
-
-            movement
+            )
 
         );
 
     }
 
 
-    const absoluteMovements =
-
-        directionalMovements.map(
-
-            value =>
-
-                Math.abs(
-
-                    value
-
-                )
-
-        );
-
-
-    const averageMovement =
+    const average =
 
         calculateSMA(
 
-            absoluteMovements,
+            movements,
 
             period
 
@@ -2138,7 +2693,7 @@ function calculateADX(
 
     if (
 
-        !averageMovement
+        !average
 
     ) {
 
@@ -2147,37 +2702,28 @@ function calculateADX(
     }
 
 
-    const recentMovement =
+    const latest =
 
-        Math.abs(
+        movements[
 
-            directionalMovements[
+            movements.length - 1
 
-                directionalMovements.length - 1
-
-            ]
-
-        );
-
-
-    const adx =
-
-        (
-
-            recentMovement /
-
-            averageMovement
-
-        ) *
-
-        25;
+        ];
 
 
     return Math.min(
 
         100,
 
-        adx
+        (
+
+            latest /
+
+            average
+
+        ) *
+
+        25
 
     );
 
@@ -2185,12 +2731,12 @@ function calculateADX(
 
 
 /* =========================================================
-   TECHNICAL SCORING
+   SCORING SYSTEM
 ========================================================= */
 
-function calculateTechnicalAnalysis(
+function calculateScore(
 
-    quote,
+    stock,
 
     indicators
 
@@ -2198,31 +2744,20 @@ function calculateTechnicalAnalysis(
 
     const price =
 
-        quote.price;
+        stock.price;
 
 
-    let score = 0;
-
-    let buySignals = 0;
-
-    let sellSignals = 0;
-
-    let totalSignals = 0;
+    let score = 50;
 
 
     const signals = {};
 
-
-    /* RSI */
 
     if (
 
         indicators.rsi !== null
 
     ) {
-
-        totalSignals++;
-
 
         if (
 
@@ -2232,23 +2767,7 @@ function calculateTechnicalAnalysis(
 
         ) {
 
-            score += 15;
-
-            buySignals++;
-
-            signals.rsi = "BUY";
-
-        }
-
-        else if (
-
-            indicators.rsi < 30
-
-        ) {
-
-            score += 15;
-
-            buySignals++;
+            score += 10;
 
             signals.rsi = "BUY";
 
@@ -2260,28 +2779,31 @@ function calculateTechnicalAnalysis(
 
         ) {
 
-            score -= 15;
-
-            sellSignals++;
+            score -= 10;
 
             signals.rsi = "SELL";
 
         }
 
-        else {
+        else if (
 
-            score += 7;
+            indicators.rsi < 30
+
+        ) {
+
+            score += 5;
+
+            signals.rsi = "BUY";
+
+        }
+
+        else {
 
             signals.rsi = "NEUTRAL";
 
         }
 
     }
-
-
-    /* MACD */
-
-    totalSignals++;
 
 
     if (
@@ -2294,8 +2816,6 @@ function calculateTechnicalAnalysis(
 
         score += 15;
 
-        buySignals++;
-
         signals.macd = "BUY";
 
     }
@@ -2304,14 +2824,10 @@ function calculateTechnicalAnalysis(
 
         score -= 15;
 
-        sellSignals++;
-
         signals.macd = "SELL";
 
     }
 
-
-    /* EMA 20 / 50 */
 
     if (
 
@@ -2320,9 +2836,6 @@ function calculateTechnicalAnalysis(
         indicators.ema50 !== null
 
     ) {
-
-        totalSignals++;
-
 
         if (
 
@@ -2334,8 +2847,6 @@ function calculateTechnicalAnalysis(
 
             score += 15;
 
-            buySignals++;
-
             signals.ema = "BUY";
 
         }
@@ -2344,8 +2855,6 @@ function calculateTechnicalAnalysis(
 
             score -= 15;
 
-            sellSignals++;
-
             signals.ema = "SELL";
 
         }
@@ -2353,16 +2862,11 @@ function calculateTechnicalAnalysis(
     }
 
 
-    /* SMA 200 */
-
     if (
 
         indicators.sma200 !== null
 
     ) {
-
-        totalSignals++;
-
 
         if (
 
@@ -2374,8 +2878,6 @@ function calculateTechnicalAnalysis(
 
             score += 10;
 
-            buySignals++;
-
             signals.sma = "BUY";
 
         }
@@ -2384,8 +2886,6 @@ function calculateTechnicalAnalysis(
 
             score -= 10;
 
-            sellSignals++;
-
             signals.sma = "SELL";
 
         }
@@ -2393,16 +2893,11 @@ function calculateTechnicalAnalysis(
     }
 
 
-    /* Bollinger Bands */
-
     if (
 
         indicators.bollinger
 
     ) {
-
-        totalSignals++;
-
 
         if (
 
@@ -2412,17 +2907,13 @@ function calculateTechnicalAnalysis(
 
         ) {
 
-            score += 10;
-
-            buySignals++;
+            score += 5;
 
             signals.bollinger = "BUY";
 
         }
 
         else {
-
-            score += 5;
 
             signals.bollinger = "NEUTRAL";
 
@@ -2431,16 +2922,11 @@ function calculateTechnicalAnalysis(
     }
 
 
-    /* ADX */
-
     if (
 
         indicators.adx !== null
 
     ) {
-
-        totalSignals++;
-
 
         if (
 
@@ -2448,9 +2934,7 @@ function calculateTechnicalAnalysis(
 
         ) {
 
-            score += 10;
-
-            buySignals++;
+            score += 5;
 
             signals.adx = "BUY";
 
@@ -2458,16 +2942,12 @@ function calculateTechnicalAnalysis(
 
         else {
 
-            score += 5;
-
             signals.adx = "NEUTRAL";
 
         }
 
     }
 
-
-    /* Volume */
 
     if (
 
@@ -2477,10 +2957,7 @@ function calculateTechnicalAnalysis(
 
     ) {
 
-        totalSignals++;
-
-
-        const volumeRatio =
+        const ratio =
 
             indicators.currentVolume /
 
@@ -2489,21 +2966,17 @@ function calculateTechnicalAnalysis(
 
         if (
 
-            volumeRatio >= 1.2
+            ratio >= 1.2
 
         ) {
 
-            score += 10;
-
-            buySignals++;
+            score += 5;
 
             signals.volume = "BUY";
 
         }
 
         else {
-
-            score += 5;
 
             signals.volume = "NEUTRAL";
 
@@ -2512,12 +2985,7 @@ function calculateTechnicalAnalysis(
     }
 
 
-    const maxPossibleScore =
-
-        85;
-
-
-    const normalizedScore =
+    score =
 
         Math.max(
 
@@ -2529,15 +2997,7 @@ function calculateTechnicalAnalysis(
 
                 Math.round(
 
-                    (
-
-                        score /
-
-                        maxPossibleScore
-
-                    ) *
-
-                    100
+                    score
 
                 )
 
@@ -2553,7 +3013,7 @@ function calculateTechnicalAnalysis(
 
     if (
 
-        normalizedScore >= 75
+        score >= 75
 
     ) {
 
@@ -2565,7 +3025,7 @@ function calculateTechnicalAnalysis(
 
     else if (
 
-        normalizedScore >= 60
+        score >= 60
 
     ) {
 
@@ -2577,7 +3037,7 @@ function calculateTechnicalAnalysis(
 
     else if (
 
-        normalizedScore <= 25
+        score <= 25
 
     ) {
 
@@ -2589,7 +3049,7 @@ function calculateTechnicalAnalysis(
 
     else if (
 
-        normalizedScore <= 40
+        score <= 40
 
     ) {
 
@@ -2600,7 +3060,7 @@ function calculateTechnicalAnalysis(
     }
 
 
-    const tradeLevels =
+    const levels =
 
         calculateTradeLevels(
 
@@ -2615,21 +3075,13 @@ function calculateTechnicalAnalysis(
 
     return {
 
-        score:
-
-            normalizedScore,
+        score,
 
         signal,
 
-        buySignals,
-
-        sellSignals,
-
-        totalSignals,
-
         signals,
 
-        tradeLevels
+        levels
 
     };
 
@@ -2669,20 +3121,13 @@ function calculateTradeLevels(
 
             stopLoss: null,
 
-            exit: null
+            exit: null,
+
+            riskReward: null
 
         };
 
     }
-
-
-    let entry = price;
-
-
-    let stopLoss;
-
-
-    let target;
 
 
     if (
@@ -2695,34 +3140,58 @@ function calculateTradeLevels(
 
     ) {
 
-        stopLoss =
+        const stopLoss =
 
             price -
 
-            (
+            atr *
 
-                atr *
-
-                1.5
-
-            );
+            1.5;
 
 
-        target =
+        const target =
 
             price +
 
-            (
+            atr *
 
-                atr *
+            2;
 
-                2
 
-            );
+        return {
+
+            entry: price,
+
+            target,
+
+            stopLoss,
+
+            exit: target,
+
+            riskReward:
+
+                (
+
+                    target -
+
+                    price
+
+                ) /
+
+                (
+
+                    price -
+
+                    stopLoss
+
+                )
+
+        };
 
     }
 
-    else if (
+
+    if (
 
         signal.includes(
 
@@ -2732,60 +3201,68 @@ function calculateTradeLevels(
 
     ) {
 
-        stopLoss =
+        const stopLoss =
 
             price +
 
-            (
+            atr *
 
-                atr *
-
-                1.5
-
-            );
+            1.5;
 
 
-        target =
+        const target =
 
             price -
 
-            (
+            atr *
 
-                atr *
-
-                2
-
-            );
-
-    }
-
-    else {
-
-        stopLoss =
-
-            price -
-
-            atr;
+            2;
 
 
-        target =
+        return {
 
-            price +
+            entry: price,
 
-            atr;
+            target,
+
+            stopLoss,
+
+            exit: target,
+
+            riskReward:
+
+                (
+
+                    price -
+
+                    target
+
+                ) /
+
+                (
+
+                    stopLoss -
+
+                    price
+
+                )
+
+        };
 
     }
 
 
     return {
 
-        entry,
+        entry: price,
 
-        target,
+        target: price + atr,
 
-        stopLoss,
+        stopLoss: price - atr,
 
-        exit: target
+        exit: price + atr,
+
+        riskReward: 1
 
     };
 
@@ -2793,481 +3270,182 @@ function calculateTradeLevels(
 
 
 /* =========================================================
-   RENDER REAL ANALYSIS
+   RENDER DASHBOARD
 ========================================================= */
 
-function renderRealAnalysis(
+function renderDashboard() {
 
-    instrument,
+    renderIndexCards();
 
-    quote,
+    renderMarketBreadth();
 
-    indicators,
+    renderOpportunities();
 
-    analysis
+    renderTopMovers();
+
+    renderBuySignals();
+
+    renderSellSignals();
+
+    renderMarketOverview();
+
+    renderWatchlist();
+
+}
+
+
+function renderDashboardError(
+
+    message
 
 ) {
 
-    const section =
+    const ids = [
 
-        query(
+        "index-grid",
 
-            ".stock-analysis-section"
+        "opportunity-table-body",
+
+        "top-gainers-list",
+
+        "top-losers-list",
+
+        "buy-signal-grid",
+
+        "sell-signal-grid"
+
+    ];
+
+
+    ids.forEach(
+
+        id => {
+
+            const element =
+
+                byId(
+
+                    id
+
+                );
+
+
+            if (
+
+                element
+
+            ) {
+
+                element.innerHTML = `
+
+                    <div class="empty-state">
+
+                        <h3>
+
+                            Real data unavailable
+
+                        </h3>
+
+                        <p>
+
+                            ${
+
+                                escapeHTML(
+
+                                    message
+
+                                )
+
+                            }
+
+                        </p>
+
+                    </div>
+
+                `;
+
+            }
+
+        }
+
+    );
+
+}
+
+
+/* =========================================================
+   INDEX CARDS
+========================================================= */
+
+function renderIndexCards() {
+
+    const container =
+
+        byId(
+
+            "index-grid"
 
         );
 
 
     if (
 
-        !section
+        !container
+
+    ) return;
+
+
+    const indices =
+
+        state.instruments
+
+            .filter(
+
+                item =>
+
+                    item.instrument_type ===
+
+                    "INDEX"
+
+            )
+
+            .slice(
+
+                0,
+
+                5
+
+            );
+
+
+    container.innerHTML = "";
+
+
+    if (
+
+        !indices.length
 
     ) {
 
-        console.warn(
+        container.innerHTML = `
 
-            "Analysis section not found."
+            <div class="empty-state">
 
-        );
+                Index data unavailable
+
+            </div>
+
+        `;
+
 
         return;
 
     }
 
 
-    section.classList.remove(
+    indices.forEach(
 
-        "hidden"
-
-    );
-
-
-    const symbol =
-
-        instrument.trading_symbol ||
-
-        instrument.short_name ||
-
-        instrument.name;
-
-
-    setText(
-
-        section,
-
-        ".analysis-symbol",
-
-        symbol
-
-    );
-
-
-    setText(
-
-        section,
-
-        ".analysis-price",
-
-        formatPrice(
-
-            quote.price
-
-        )
-
-    );
-
-
-    setText(
-
-        section,
-
-        ".analysis-price-change",
-
-        `${
-
-            quote.percentChange >= 0
-
-                ? "+"
-
-                : ""
-
-        }${
-
-            quote.percentChange.toFixed(
-
-                2
-
-            )
-
-        }%`
-
-    );
-
-
-    setText(
-
-        section,
-
-        ".large-signal-badge",
-
-        analysis.signal
-
-    );
-
-
-    setText(
-
-        section,
-
-        ".technical-score strong",
-
-        `${
-
-            analysis.score
-
-        }/100`
-
-    );
-
-
-    renderTradeLevels(
-
-        section,
-
-        analysis.tradeLevels
-
-    );
-
-
-    renderIndicators(
-
-        section,
-
-        indicators,
-
-        analysis
-
-    );
-
-
-    renderAdditionalMetrics(
-
-        section,
-
-        indicators
-
-    );
-
-}
-
-
-/* =========================================================
-   RENDER TRADE LEVELS
-========================================================= */
-
-function renderTradeLevels(
-
-    section,
-
-    levels
-
-) {
-
-    const cards =
-
-        section.querySelectorAll(
-
-            ".trade-level-card strong"
-
-        );
-
-
-    if (
-
-        cards.length >= 4
-
-    ) {
-
-        cards[0].textContent =
-
-            formatPrice(
-
-                levels.entry
-
-            );
-
-
-        cards[1].textContent =
-
-            levels.target
-
-                ? formatPrice(
-
-                    levels.target
-
-                )
-
-                : "--";
-
-
-        cards[2].textContent =
-
-            levels.stopLoss
-
-                ? formatPrice(
-
-                    levels.stopLoss
-
-                )
-
-                : "--";
-
-
-        cards[3].textContent =
-
-            levels.exit
-
-                ? formatPrice(
-
-                    levels.exit
-
-                )
-
-                : "--";
-
-    }
-
-}
-
-
-/* =========================================================
-   RENDER INDICATORS
-========================================================= */
-
-function renderIndicators(
-
-    section,
-
-    indicators,
-
-    analysis
-
-) {
-
-    const grid =
-
-        section.querySelector(
-
-            ".indicator-grid"
-
-        );
-
-
-    if (
-
-        !grid
-
-    ) return;
-
-
-    const indicatorData = [
-
-        {
-
-            name: "RSI",
-
-            signal:
-
-                analysis.signals.rsi ||
-
-                "N/A",
-
-            value:
-
-                indicators.rsi !== null
-
-                    ? indicators.rsi.toFixed(
-
-                        2
-
-                    )
-
-                    : "--"
-
-        },
-
-        {
-
-            name: "MACD",
-
-            signal:
-
-                analysis.signals.macd ||
-
-                "N/A",
-
-            value:
-
-                indicators.macd.signal
-
-        },
-
-        {
-
-            name: "EMA 20 / 50",
-
-            signal:
-
-                analysis.signals.ema ||
-
-                "N/A",
-
-            value:
-
-                indicators.ema20 &&
-
-                indicators.ema50
-
-                    ? `${
-
-                        indicators.ema20.toFixed(
-
-                            2
-
-                        )
-
-                    } / ${
-
-                        indicators.ema50.toFixed(
-
-                            2
-
-                        )
-
-                    }`
-
-                    : "--"
-
-        },
-
-        {
-
-            name: "SMA 200",
-
-            signal:
-
-                analysis.signals.sma ||
-
-                "N/A",
-
-            value:
-
-                indicators.sma200
-
-                    ? indicators.sma200.toFixed(
-
-                        2
-
-                    )
-
-                    : "--"
-
-        },
-
-        {
-
-            name: "Bollinger Bands",
-
-            signal:
-
-                analysis.signals.bollinger ||
-
-                "N/A",
-
-            value:
-
-                indicators.bollinger
-
-                    ? `Upper: ${
-
-                        indicators.bollinger.upper.toFixed(
-
-                            2
-
-                        )
-
-                    }`
-
-                    : "--"
-
-        },
-
-        {
-
-            name: "ADX",
-
-            signal:
-
-                analysis.signals.adx ||
-
-                "N/A",
-
-            value:
-
-                indicators.adx !== null
-
-                    ? indicators.adx.toFixed(
-
-                        2
-
-                    )
-
-                    : "--"
-
-        },
-
-        {
-
-            name: "Volume",
-
-            signal:
-
-                analysis.signals.volume ||
-
-                "N/A",
-
-            value:
-
-                indicators.averageVolume
-
-                    ? `${
-
-                        (
-
-                            indicators.currentVolume /
-
-                            indicators.averageVolume
-
-                        ).toFixed(
-
-                            2
-
-                        )
-
-                    }x average`
-
-                    : "--"
-
-        }
-
-    ];
-
-
-    grid.innerHTML = "";
-
-
-    indicatorData.forEach(
-
-        indicator => {
+        index => {
 
             const card =
 
@@ -3280,70 +3458,628 @@ function renderIndicators(
 
             card.className =
 
-                "indicator-card";
-
-
-            const signalClass =
-
-                indicator.signal ===
-
-                "BUY"
-
-                    ? "positive"
-
-                    : indicator.signal ===
-
-                        "SELL"
-
-                        ? "negative"
-
-                        : "neutral";
+                "index-card";
 
 
             card.innerHTML = `
 
-                <div class="indicator-name">
+                <span>
 
                     ${
 
-                        indicator.name
+                        escapeHTML(
+
+                            index.name ||
+
+                            index.trading_symbol
+
+                        )
 
                     }
 
-                </div>
+                </span>
 
 
-                <div class="indicator-signal ${
+                <strong>
 
-                    signalClass
+                    Loading...
+
+                </strong>
+
+            `;
+
+
+            container.appendChild(
+
+                card
+
+            );
+
+
+            fetchQuote(
+
+                index.instrument_key
+
+            )
+
+                .then(
+
+                    quote => {
+
+                        card.innerHTML = `
+
+                            <span>
+
+                                ${
+
+                                    escapeHTML(
+
+                                        index.name ||
+
+                                        index.trading_symbol
+
+                                    )
+
+                                }
+
+                            </span>
+
+
+                            <strong>
+
+                                ${
+
+                                    formatPrice(
+
+                                        quote.price
+
+                                    )
+
+                                }
+
+                            </strong>
+
+
+                            <small class="${
+
+                                quote.percent_change >= 0
+
+                                    ? "positive"
+
+                                    : "negative"
+
+                            }">
+
+                                ${
+
+                                    quote.percent_change >= 0
+
+                                        ? "+"
+
+                                        : ""
+
+                                }${
+
+                                    quote.percent_change.toFixed(
+
+                                        2
+
+                                    )
+
+                                }%
+
+                            </small>
+
+                        `;
+
+                    }
+
+                )
+
+                .catch(
+
+                    () => {
+
+                        card.innerHTML += `
+
+                            <small>
+
+                                Data unavailable
+
+                            </small>
+
+                        `;
+
+                    }
+
+                );
+
+        }
+
+    );
+
+}
+
+
+/* =========================================================
+   MARKET BREADTH
+========================================================= */
+
+function renderMarketBreadth() {
+
+    const stocks =
+
+        state.dashboardStocks;
+
+
+    const advancing =
+
+        stocks.filter(
+
+            stock =>
+
+                stock.percent_change > 0
+
+        ).length;
+
+
+    const declining =
+
+        stocks.filter(
+
+            stock =>
+
+                stock.percent_change < 0
+
+        ).length;
+
+
+    const total =
+
+        advancing +
+
+        declining;
+
+
+    const advancePercent =
+
+        total
+
+            ? (
+
+                advancing /
+
+                total
+
+            ) *
+
+            100
+
+            : 50;
+
+
+    const advanceBar =
+
+        byId(
+
+            "advance-bar"
+
+        );
+
+
+    const declineBar =
+
+        byId(
+
+            "decline-bar"
+
+        );
+
+
+    if (
+
+        advanceBar
+
+    ) {
+
+        advanceBar.style.width =
+
+            `${
+
+                advancePercent
+
+            }%`;
+
+    }
+
+
+    if (
+
+        declineBar
+
+    ) {
+
+        declineBar.style.width =
+
+            `${
+
+                100 -
+
+                advancePercent
+
+            }%`;
+
+    }
+
+
+    setText(
+
+        "advancing-count",
+
+        advancing
+
+    );
+
+
+    setText(
+
+        "declining-count",
+
+        declining
+
+    );
+
+
+    setText(
+
+        "market-sentiment",
+
+        advancing > declining
+
+            ? "BULLISH"
+
+            : declining > advancing
+
+                ? "BEARISH"
+
+                : "NEUTRAL"
+
+    );
+
+
+    setText(
+
+        "market-trend",
+
+        advancing > declining
+
+            ? "Bullish"
+
+            : declining > advancing
+
+                ? "Bearish"
+
+                : "Neutral"
+
+    );
+
+
+    setText(
+
+        "market-trend-description",
+
+        `Based on ${
+
+            total
+
+        } analyzed stocks`
+
+    );
+
+}
+
+
+/* =========================================================
+   OPPORTUNITIES
+========================================================= */
+
+function renderOpportunities(
+
+    filter = "all"
+
+) {
+
+    const tbody =
+
+        byId(
+
+            "opportunity-table-body"
+
+        );
+
+
+    if (
+
+        !tbody
+
+    ) return;
+
+
+    let stocks =
+
+        state.dashboardStocks;
+
+
+    if (
+
+        filter === "buy"
+
+    ) {
+
+        stocks =
+
+            state.buySignals;
+
+    }
+
+
+    if (
+
+        filter === "sell"
+
+    ) {
+
+        stocks =
+
+            state.sellSignals;
+
+    }
+
+
+    stocks =
+
+        [...stocks]
+
+            .sort(
+
+                (
+
+                    a,
+
+                    b
+
+                ) =>
+
+                    b.analysis.score -
+
+                    a.analysis.score
+
+            )
+
+            .slice(
+
+                0,
+
+                20
+
+            );
+
+
+    tbody.innerHTML = "";
+
+
+    stocks.forEach(
+
+        (
+
+            stock,
+
+            index
+
+        ) => {
+
+            const row =
+
+                document.createElement(
+
+                    "tr"
+
+                );
+
+
+            const levels =
+
+                stock.analysis.levels;
+
+
+            row.innerHTML = `
+
+                <td>
+
+                    #${
+
+                        index + 1
+
+                    }
+
+                </td>
+
+
+                <td>
+
+                    <strong>
+
+                        ${
+
+                            escapeHTML(
+
+                                stock.trading_symbol ||
+
+                                stock.short_name ||
+
+                                stock.name
+
+                            )
+
+                        }
+
+                    </strong>
+
+                </td>
+
+
+                <td>
+
+                    ${
+
+                        formatPrice(
+
+                            stock.price
+
+                        )
+
+                    }
+
+                </td>
+
+
+                <td class="${
+
+                    stock.percent_change >= 0
+
+                        ? "positive"
+
+                        : "negative"
 
                 }">
 
                     ${
 
-                        indicator.signal
+                        stock.percent_change >= 0
 
-                    }
+                            ? "+"
 
-                </div>
+                            : ""
+
+                    }${
+
+                        stock.percent_change.toFixed(
+
+                            2
+
+                        )
+
+                    }%
+
+                </td>
 
 
-                <div class="indicator-value">
+                <td>
 
                     ${
 
-                        indicator.value
+                        stock.analysis.score
+
+                    }/100
+
+                </td>
+
+
+                <td>
+
+                    ${
+
+                        stock.analysis.signal
 
                     }
 
-                </div>
+                </td>
+
+
+                <td>
+
+                    ${
+
+                        formatPrice(
+
+                            levels.entry
+
+                        )
+
+                    }
+
+                </td>
+
+
+                <td>
+
+                    ${
+
+                        formatPrice(
+
+                            levels.target
+
+                        )
+
+                    }
+
+                </td>
+
+
+                <td>
+
+                    ${
+
+                        formatPrice(
+
+                            levels.stopLoss
+
+                        )
+
+                    }
+
+                </td>
+
+
+                <td>
+
+                    <button class="view-stock-button">
+
+                        View
+
+                    </button>
+
+                </td>
 
             `;
 
 
-            grid.appendChild(
+            row.querySelector(
 
-                card
+                ".view-stock-button"
+
+            )
+
+                .addEventListener(
+
+                    "click",
+
+                    () => {
+
+                        selectStock(
+
+                            stock
+
+                        );
+
+                    }
+
+                );
+
+
+            tbody.appendChild(
+
+                row
 
             );
 
@@ -3355,25 +4091,656 @@ function renderIndicators(
 
 
 /* =========================================================
-   ADDITIONAL METRICS
+   TOP GAINERS / LOSERS
 ========================================================= */
 
-function renderAdditionalMetrics(
+function renderTopMovers() {
 
-    section,
+    renderMiniList(
 
-    indicators
+        "top-gainers-list",
+
+        state.topGainers,
+
+        true
+
+    );
+
+
+    renderMiniList(
+
+        "top-losers-list",
+
+        state.topLosers,
+
+        false
+
+    );
+
+}
+
+
+function renderMiniList(
+
+    id,
+
+    stocks,
+
+    positive
 
 ) {
 
-    const atr =
+    const container =
 
-        indicators.atr;
+        byId(
+
+            id
+
+        );
 
 
-    const adx =
+    if (
 
-        indicators.adx;
+        !container
+
+    ) return;
+
+
+    container.innerHTML = "";
+
+
+    stocks.forEach(
+
+        stock => {
+
+            const item =
+
+                document.createElement(
+
+                    "div"
+
+                );
+
+
+            item.className =
+
+                "mini-stock-item";
+
+
+            item.innerHTML = `
+
+                <strong>
+
+                    ${
+
+                        escapeHTML(
+
+                            stock.trading_symbol ||
+
+                            stock.short_name ||
+
+                            stock.name
+
+                        )
+
+                    }
+
+                </strong>
+
+
+                <span>
+
+                    ${
+
+                        formatPrice(
+
+                            stock.price
+
+                        )
+
+                    }
+
+                </span>
+
+
+                <b class="${
+
+                    positive
+
+                        ? "positive"
+
+                        : "negative"
+
+                }">
+
+                    ${
+
+                        positive
+
+                            ? "+"
+
+                            : ""
+
+                    }${
+
+                        stock.percent_change.toFixed(
+
+                            2
+
+                        )
+
+                    }%
+
+                </b>
+
+            `;
+
+
+            item.addEventListener(
+
+                "click",
+
+                () => {
+
+                    selectStock(
+
+                        stock
+
+                    );
+
+                }
+
+            );
+
+
+            container.appendChild(
+
+                item
+
+            );
+
+        }
+
+    );
+
+}
+
+
+/* =========================================================
+   BUY SIGNALS
+========================================================= */
+
+function renderBuySignals() {
+
+    renderSignalCards(
+
+        "buy-signal-grid",
+
+        state.buySignals
+
+    );
+
+}
+
+
+function renderSellSignals() {
+
+    renderSignalCards(
+
+        "sell-signal-grid",
+
+        state.sellSignals
+
+    );
+
+}
+
+
+function renderSignalCards(
+
+    id,
+
+    stocks
+
+) {
+
+    const container =
+
+        byId(
+
+            id
+
+        );
+
+
+    if (
+
+        !container
+
+    ) return;
+
+
+    container.innerHTML = "";
+
+
+    stocks
+
+        .slice(
+
+            0,
+
+            20
+
+        )
+
+        .forEach(
+
+            stock => {
+
+                const card =
+
+                    document.createElement(
+
+                        "div"
+
+                    );
+
+
+                card.className =
+
+                    "signal-card";
+
+
+                card.innerHTML = `
+
+                    <h3>
+
+                        ${
+
+                            escapeHTML(
+
+                                stock.trading_symbol ||
+
+                                stock.short_name ||
+
+                                stock.name
+
+                            )
+
+                        }
+
+                    </h3>
+
+
+                    <strong>
+
+                        ${
+
+                            formatPrice(
+
+                                stock.price
+
+                            )
+
+                        }
+
+                    </strong>
+
+
+                    <p>
+
+                        Score:
+
+                        ${
+
+                            stock.analysis.score
+
+                        }/100
+
+                    </p>
+
+
+                    <span>
+
+                        ${
+
+                            stock.analysis.signal
+
+                        }
+
+                    </span>
+
+                `;
+
+
+                card.addEventListener(
+
+                    "click",
+
+                    () => {
+
+                        selectStock(
+
+                            stock
+
+                        );
+
+                    }
+
+                );
+
+
+                container.appendChild(
+
+                    card
+
+                );
+
+            }
+
+        );
+
+}
+
+
+/* =========================================================
+   MARKET OVERVIEW
+========================================================= */
+
+function renderMarketOverview() {
+
+    const stocks =
+
+        state.dashboardStocks;
+
+
+    if (
+
+        !stocks.length
+
+    ) return;
+
+
+    const averageScore =
+
+        stocks.reduce(
+
+            (
+
+                total,
+
+                stock
+
+            ) =>
+
+                total +
+
+                stock.analysis.score,
+
+            0
+
+        ) /
+
+        stocks.length;
+
+
+    setText(
+
+        "market-nifty-trend",
+
+        averageScore >= 60
+
+            ? "Bullish"
+
+            : averageScore <= 40
+
+                ? "Bearish"
+
+                : "Neutral"
+
+    );
+
+
+    setText(
+
+        "market-banknifty-trend",
+
+        averageScore >= 60
+
+            ? "Bullish"
+
+            : averageScore <= 40
+
+                ? "Bearish"
+
+                : "Neutral"
+
+    );
+
+
+    setText(
+
+        "market-momentum",
+
+        averageScore.toFixed(
+
+            0
+
+        ) +
+
+        "/100"
+
+    );
+
+
+    setText(
+
+        "market-volatility",
+
+        "Calculated from ATR"
+
+    );
+
+}
+
+
+/* =========================================================
+   STOCK ANALYSIS UI
+========================================================= */
+
+function renderAnalysis(
+
+    instrument,
+
+    quote,
+
+    indicators,
+
+    analysis
+
+) {
+
+    setText(
+
+        "analysis-stock-name",
+
+        instrument.name ||
+
+        instrument.trading_symbol
+
+    );
+
+
+    setText(
+
+        "analysis-symbol",
+
+        instrument.trading_symbol
+
+    );
+
+
+    setText(
+
+        "analysis-price",
+
+        formatPrice(
+
+            quote.price
+
+        )
+
+    );
+
+
+    const change =
+
+        byId(
+
+            "analysis-price-change"
+
+        );
+
+
+    if (
+
+        change
+
+    ) {
+
+        change.textContent =
+
+            `${
+
+                quote.percent_change >= 0
+
+                    ? "+"
+
+                    : ""
+
+            }${
+
+                quote.percent_change.toFixed(
+
+                    2
+
+                )
+
+            }%`;
+
+    }
+
+
+    setText(
+
+        "analysis-signal",
+
+        analysis.signal
+
+    );
+
+
+    setText(
+
+        "analysis-score",
+
+        `${
+
+            analysis.score
+
+        }/100`
+
+    );
+
+
+    setText(
+
+        "analysis-entry-price",
+
+        formatPrice(
+
+            analysis.levels.entry
+
+        )
+
+    );
+
+
+    setText(
+
+        "analysis-target-price",
+
+        formatPrice(
+
+            analysis.levels.target
+
+        )
+
+    );
+
+
+    setText(
+
+        "analysis-stop-loss",
+
+        formatPrice(
+
+            analysis.levels.stopLoss
+
+        )
+
+    );
+
+
+    setText(
+
+        "analysis-exit-price",
+
+        formatPrice(
+
+            analysis.levels.exit
+
+        )
+
+    );
+
+
+    setText(
+
+        "risk-reward-ratio",
+
+        analysis.levels.riskReward
+
+            ? `1 : ${
+
+                analysis.levels.riskReward.toFixed(
+
+                    2
+
+                )
+
+            }`
+
+            : "--"
+
+    );
+
+
+    setText(
+
+        "trend-strength",
+
+        indicators.adx !== null
+
+            ? indicators.adx.toFixed(
+
+                2
+
+            )
+
+            : "--"
+
+    );
 
 
     const volumeRatio =
@@ -3389,28 +4756,7 @@ function renderAdditionalMetrics(
 
     setText(
 
-        section,
-
-        ".trend-strength",
-
-        adx !== null
-
-            ? adx.toFixed(
-
-                2
-
-            )
-
-            : "--"
-
-    );
-
-
-    setText(
-
-        section,
-
-        ".volume-strength",
+        "volume-strength",
 
         volumeRatio !== null
 
@@ -3429,21 +4775,283 @@ function renderAdditionalMetrics(
     );
 
 
+    renderIndicatorGrid(
+
+        indicators,
+
+        analysis
+
+    );
+
+
     setText(
 
-        section,
+        "analysis-last-updated",
 
-        ".atr-value",
+        `Last updated: ${
 
-        atr !== null
+            new Date().toLocaleTimeString(
 
-            ? formatPrice(
-
-                atr
+                "en-IN"
 
             )
 
-            : "--"
+        }`
+
+    );
+
+
+    renderChart(
+
+        instrument,
+
+        state.selectedCandles,
+
+        indicators
+
+    );
+
+}
+
+
+function renderIndicatorGrid(
+
+    indicators,
+
+    analysis
+
+) {
+
+    const grid =
+
+        byId(
+
+            "indicator-grid"
+
+        );
+
+
+    if (
+
+        !grid
+
+    ) return;
+
+
+    const cards = [
+
+        [
+
+            "RSI",
+
+            analysis.signals.rsi,
+
+            indicators.rsi !== null
+
+                ? indicators.rsi.toFixed(
+
+                    2
+
+                )
+
+                : "--"
+
+        ],
+
+        [
+
+            "MACD",
+
+            analysis.signals.macd,
+
+            indicators.macd.signal
+
+        ],
+
+        [
+
+            "EMA",
+
+            analysis.signals.ema,
+
+            indicators.ema20 &&
+
+            indicators.ema50
+
+                ? `${
+
+                    indicators.ema20.toFixed(
+
+                        2
+
+                    )
+
+                } / ${
+
+                    indicators.ema50.toFixed(
+
+                        2
+
+                    )
+
+                }`
+
+                : "--"
+
+        ],
+
+        [
+
+            "SMA 200",
+
+            analysis.signals.sma,
+
+            indicators.sma200
+
+                ? indicators.sma200.toFixed(
+
+                    2
+
+                )
+
+                : "--"
+
+        ],
+
+        [
+
+            "Bollinger Bands",
+
+            analysis.signals.bollinger,
+
+            indicators.bollinger
+
+                ? formatPrice(
+
+                    indicators.bollinger.middle
+
+                )
+
+                : "--"
+
+        ],
+
+        [
+
+            "ADX",
+
+            analysis.signals.adx,
+
+            indicators.adx !== null
+
+                ? indicators.adx.toFixed(
+
+                    2
+
+                )
+
+                : "--"
+
+        ],
+
+        [
+
+            "Volume",
+
+            analysis.signals.volume,
+
+            indicators.averageVolume
+
+                ? `${
+
+                    (
+
+                        indicators.currentVolume /
+
+                        indicators.averageVolume
+
+                    ).toFixed(
+
+                        2
+
+                    )
+
+                }x average`
+
+                : "--"
+
+        ]
+
+    ];
+
+
+    grid.innerHTML = "";
+
+
+    cards.forEach(
+
+        cardData => {
+
+            const card =
+
+                document.createElement(
+
+                    "div"
+
+                );
+
+
+            card.className =
+
+                "indicator-card";
+
+
+            card.innerHTML = `
+
+                <div>
+
+                    ${
+
+                        cardData[0]
+
+                    }
+
+                </div>
+
+
+                <strong>
+
+                    ${
+
+                        cardData[1] ||
+
+                        "N/A"
+
+                    }
+
+                </strong>
+
+
+                <span>
+
+                    ${
+
+                        cardData[2]
+
+                    }
+
+                </span>
+
+            `;
+
+
+            grid.appendChild(
+
+                card
+
+            );
+
+        }
 
     );
 
@@ -3451,50 +5059,374 @@ function renderAdditionalMetrics(
 
 
 /* =========================================================
-   REFRESH
+   CHART
 ========================================================= */
 
-function setupRefreshButton() {
+function renderChart(
 
-    const button =
+    instrument,
 
-        query(
+    candles,
 
-            ".refresh-button"
+    indicators
+
+) {
+
+    const modalContent =
+
+        byId(
+
+            "modal-content"
 
         );
 
 
     if (
 
-        !button
+        !modalContent
 
     ) return;
 
 
-    button.addEventListener(
+    modalContent.innerHTML = `
 
-        "click",
+        <div class="stock-detail-header">
 
-        () => {
+            <h2>
+
+                ${
+
+                    escapeHTML(
+
+                        instrument.name ||
+
+                        instrument.trading_symbol
+
+                    )
+
+                }
+
+            </h2>
+
+
+            <p>
+
+                ${
+
+                    escapeHTML(
+
+                        instrument.trading_symbol
+
+                    )
+
+                }
+
+            </p>
+
+        </div>
+
+
+        <div class="stock-detail-price">
+
+            ${
+
+                formatPrice(
+
+                    state.selectedQuote.price
+
+                )
+
+            }
+
+        </div>
+
+
+        <div class="chart-container">
+
+            <canvas id="stock-price-chart"></canvas>
+
+        </div>
+
+
+        <div class="chart-data-grid">
+
+            <div>
+
+                <span>RSI</span>
+
+                <strong>
+
+                    ${
+
+                        indicators.rsi?.toFixed(
+
+                            2
+
+                        ) ||
+
+                        "--"
+
+                    }
+
+                </strong>
+
+            </div>
+
+
+            <div>
+
+                <span>EMA 20</span>
+
+                <strong>
+
+                    ${
+
+                        indicators.ema20?.toFixed(
+
+                            2
+
+                        ) ||
+
+                        "--"
+
+                    }
+
+                </strong>
+
+            </div>
+
+
+            <div>
+
+                <span>EMA 50</span>
+
+                <strong>
+
+                    ${
+
+                        indicators.ema50?.toFixed(
+
+                            2
+
+                        ) ||
+
+                        "--"
+
+                    }
+
+                </strong>
+
+            </div>
+
+
+            <div>
+
+                <span>ATR</span>
+
+                <strong>
+
+                    ${
+
+                        indicators.atr?.toFixed(
+
+                            2
+
+                        ) ||
+
+                        "--"
+
+                    }
+
+                </strong>
+
+            </div>
+
+        </div>
+
+    `;
+
+
+    const canvas =
+
+        byId(
+
+            "stock-price-chart"
+
+        );
+
+
+    if (
+
+        !canvas
+
+    ) return;
+
+
+    const context =
+
+        canvas.getContext(
+
+            "2d"
+
+        );
+
+
+    const recent =
+
+        candles.slice(
+
+            -60
+
+        );
+
+
+    const prices =
+
+        recent.map(
+
+            candle => candle.close
+
+        );
+
+
+    const width =
+
+        canvas.width =
+
+            canvas.clientWidth *
+
+            window.devicePixelRatio;
+
+
+    const height =
+
+        canvas.height =
+
+            320 *
+
+            window.devicePixelRatio;
+
+
+    context.scale(
+
+        window.devicePixelRatio,
+
+        window.devicePixelRatio
+
+    );
+
+
+    const drawWidth =
+
+        canvas.clientWidth;
+
+
+    const drawHeight =
+
+        320;
+
+
+    const min =
+
+        Math.min(
+
+            ...prices
+
+        );
+
+
+    const max =
+
+        Math.max(
+
+            ...prices
+
+        );
+
+
+    const range =
+
+        max -
+
+        min || 1;
+
+
+    context.beginPath();
+
+
+    prices.forEach(
+
+        (
+
+            price,
+
+            index
+
+        ) => {
+
+            const x =
+
+                (
+
+                    index /
+
+                    (
+
+                        prices.length -
+
+                        1
+
+                    )
+
+                ) *
+
+                drawWidth;
+
+
+            const y =
+
+                drawHeight -
+
+                (
+
+                    (
+
+                        price -
+
+                        min
+
+                    ) /
+
+                    range
+
+                ) *
+
+                drawHeight;
+
 
             if (
 
-                appState.selectedInstrument
+                index === 0
 
             ) {
 
-                analyzeSelectedStock();
+                context.moveTo(
+
+                    x,
+
+                    y
+
+                );
 
             }
 
             else {
 
-                showToast(
+                context.lineTo(
 
-                    "Select a stock first.",
+                    x,
 
-                    "warning"
+                    y
 
                 );
 
@@ -3503,6 +5435,9 @@ function setupRefreshButton() {
         }
 
     );
+
+
+    context.stroke();
 
 }
 
@@ -3513,7 +5448,7 @@ function setupRefreshButton() {
 
 function setupNavigation() {
 
-    queryAll(
+    $$(
 
         ".nav-item"
 
@@ -3527,28 +5462,248 @@ function setupNavigation() {
 
                 () => {
 
-                    queryAll(
+                    const page =
 
-                        ".nav-item"
+                        item.dataset.page;
+
+
+                    navigateTo(
+
+                        page
+
+                    );
+
+                }
+
+            );
+
+        }
+
+    );
+
+}
+
+
+function navigateTo(
+
+    page
+
+) {
+
+    state.currentPage =
+
+        page;
+
+
+    $$(
+
+        ".nav-item"
+
+    ).forEach(
+
+        item => {
+
+            item.classList.toggle(
+
+                "active",
+
+                item.dataset.page ===
+
+                page
+
+            );
+
+        }
+
+    );
+
+
+    $$(
+
+        ".page-section"
+
+    ).forEach(
+
+        section => {
+
+            section.classList.add(
+
+                "hidden"
+
+            );
+
+        }
+
+    );
+
+
+    const target =
+
+        byId(
+
+            `${
+
+                page
+
+            }-page`
+
+        );
+
+
+    if (
+
+        target
+
+    ) {
+
+        target.classList.remove(
+
+            "hidden"
+
+        );
+
+    }
+
+
+    const titles = {
+
+        dashboard:
+
+            [
+
+                "Market Dashboard",
+
+                "Real-time technical analysis of the Indian stock market"
+
+            ],
+
+        "buy-signals":
+
+            [
+
+                "Buy Signals",
+
+                "Strongest bullish technical opportunities"
+
+            ],
+
+        "sell-signals":
+
+            [
+
+                "Sell Signals",
+
+                "Stocks showing technical weakness"
+
+            ],
+
+        market:
+
+            [
+
+                "Market Overview",
+
+                "Overall market strength and breadth"
+
+            ],
+
+        watchlist:
+
+            [
+
+                "Watchlist",
+
+                "Your personally tracked stocks"
+
+            ]
+
+    };
+
+
+    const title =
+
+        titles[
+
+            page
+
+        ];
+
+
+    if (
+
+        title
+
+    ) {
+
+        setText(
+
+            "page-title",
+
+            title[0]
+
+        );
+
+
+        setText(
+
+            "page-subtitle",
+
+            title[1]
+
+        );
+
+    }
+
+}
+
+
+/* =========================================================
+   FILTERS
+========================================================= */
+
+function setupFilters() {
+
+    $$(
+
+        ".filter-button"
+
+    ).forEach(
+
+        button => {
+
+            button.addEventListener(
+
+                "click",
+
+                () => {
+
+                    $$(
+
+                        ".filter-button"
 
                     ).forEach(
 
-                        nav => {
+                        item =>
 
-                            nav.classList.remove(
+                            item.classList.remove(
 
                                 "active"
 
-                            );
-
-                        }
+                            )
 
                     );
 
 
-                    item.classList.add(
+                    button.classList.add(
 
                         "active"
+
+                    );
+
+
+                    renderOpportunities(
+
+                        button.dataset.filter
 
                     );
 
@@ -3564,53 +5719,527 @@ function setupNavigation() {
 
 
 /* =========================================================
-   MOBILE MENU
+   BUTTONS
 ========================================================= */
 
-function setupMobileMenu() {
+function setupButtons() {
 
-    const button =
+    byId(
 
-        query(
+        "refresh-button"
 
-            ".mobile-menu-button"
+    )?.addEventListener(
 
-        );
+        "click",
+
+        () => {
+
+            initializeDashboard();
+
+        }
+
+    );
 
 
-    const sidebar =
+    byId(
 
-        query(
+        "search-button"
 
-            ".sidebar"
+    )?.addEventListener(
+
+        "click",
+
+        () => {
+
+            const input =
+
+                byId(
+
+                    "stock-search"
+
+                );
+
+
+            if (
+
+                input?.value
+
+            ) {
+
+                renderSearchSuggestions(
+
+                    input.value
+
+                );
+
+            }
+
+        }
+
+    );
+
+
+    byId(
+
+        "close-analysis"
+
+    )?.addEventListener(
+
+        "click",
+
+        closeAnalysis
+
+    );
+
+}
+
+
+/* =========================================================
+   MODAL
+========================================================= */
+
+function setupModal() {
+
+    byId(
+
+        "modal-close"
+
+    )?.addEventListener(
+
+        "click",
+
+        closeModal
+
+    );
+
+
+    byId(
+
+        "stock-modal"
+
+    )?.addEventListener(
+
+        "click",
+
+        event => {
+
+            if (
+
+                event.target.id ===
+
+                "stock-modal"
+
+            ) {
+
+                closeModal();
+
+            }
+
+        }
+
+    );
+
+}
+
+
+function openModal() {
+
+    byId(
+
+        "stock-modal"
+
+    )?.classList.remove(
+
+        "hidden"
+
+    );
+
+}
+
+
+function closeModal() {
+
+    byId(
+
+        "stock-modal"
+
+    )?.classList.add(
+
+        "hidden"
+
+    );
+
+}
+
+
+/* =========================================================
+   ANALYSIS OPEN / CLOSE
+========================================================= */
+
+function openAnalysis() {
+
+    const section =
+
+        byId(
+
+            "stock-analysis-section"
 
         );
 
 
     if (
 
-        !button ||
+        section
 
-        !sidebar
+    ) {
+
+        section.classList.remove(
+
+            "hidden"
+
+        );
+
+
+        section.scrollIntoView({
+
+            behavior: "smooth",
+
+            block: "start"
+
+        });
+
+    }
+
+}
+
+
+function closeAnalysis() {
+
+    byId(
+
+        "stock-analysis-section"
+
+    )?.classList.add(
+
+        "hidden"
+
+    );
+
+}
+
+
+/* =========================================================
+   WATCHLIST
+========================================================= */
+
+function loadWatchlist() {
+
+    try {
+
+        return JSON.parse(
+
+            localStorage.getItem(
+
+                "stock_screener_watchlist"
+
+            )
+
+        ) || [];
+
+    }
+
+    catch {
+
+        return [];
+
+    }
+
+}
+
+
+function saveWatchlist() {
+
+    localStorage.setItem(
+
+        "stock_screener_watchlist",
+
+        JSON.stringify(
+
+            state.watchlist
+
+        )
+
+    );
+
+}
+
+
+function renderWatchlist() {
+
+    const container =
+
+        byId(
+
+            "watchlist-container"
+
+        );
+
+
+    if (
+
+        !container
 
     ) return;
 
 
-    button.addEventListener(
+    if (
 
-        "click",
+        !state.watchlist.length
 
-        () => {
+    ) {
 
-            sidebar.classList.toggle(
+        container.innerHTML = `
 
-                "open"
+            <div class="empty-watchlist">
+
+                <span>☆</span>
+
+                <h3>
+
+                    Your watchlist is empty
+
+                </h3>
+
+                <p>
+
+                    Search for a real stock and add it to your watchlist.
+
+                </p>
+
+            </div>
+
+        `;
+
+
+        return;
+
+    }
+
+
+    container.innerHTML = "";
+
+
+    state.watchlist.forEach(
+
+        instrument => {
+
+            const card =
+
+                document.createElement(
+
+                    "div"
+
+                );
+
+
+            card.className =
+
+                "watchlist-card";
+
+
+            card.innerHTML = `
+
+                <strong>
+
+                    ${
+
+                        escapeHTML(
+
+                            instrument.trading_symbol
+
+                        )
+
+                    }
+
+                </strong>
+
+
+                <span>
+
+                    ${
+
+                        escapeHTML(
+
+                            instrument.name
+
+                        )
+
+                    }
+
+                </span>
+
+
+                <button>
+
+                    Remove
+
+                </button>
+
+            `;
+
+
+            card.querySelector(
+
+                "button"
+
+            )
+
+                .addEventListener(
+
+                    "click",
+
+                    () => {
+
+                        removeFromWatchlist(
+
+                            instrument.instrument_key
+
+                        );
+
+                    }
+
+                );
+
+
+            card.addEventListener(
+
+                "click",
+
+                event => {
+
+                    if (
+
+                        event.target.tagName !==
+
+                        "BUTTON"
+
+                    ) {
+
+                        selectStock(
+
+                            instrument
+
+                        );
+
+                    }
+
+                }
+
+            );
+
+
+            container.appendChild(
+
+                card
 
             );
 
         }
 
     );
+
+}
+
+
+function addToWatchlist(
+
+    instrument
+
+) {
+
+    const exists =
+
+        state.watchlist.some(
+
+            item =>
+
+                item.instrument_key ===
+
+                instrument.instrument_key
+
+        );
+
+
+    if (
+
+        exists
+
+    ) {
+
+        showToast(
+
+            "Already in watchlist.",
+
+            "warning"
+
+        );
+
+
+        return;
+
+    }
+
+
+    state.watchlist.push(
+
+        {
+
+            instrument_key:
+
+                instrument.instrument_key,
+
+            trading_symbol:
+
+                instrument.trading_symbol,
+
+            name:
+
+                instrument.name
+
+        }
+
+    );
+
+
+    saveWatchlist();
+
+    renderWatchlist();
+
+}
+
+
+function removeFromWatchlist(
+
+    instrumentKey
+
+) {
+
+    state.watchlist =
+
+        state.watchlist.filter(
+
+            item =>
+
+                item.instrument_key !==
+
+                instrumentKey
+
+        );
+
+
+    saveWatchlist();
+
+    renderWatchlist();
 
 }
 
@@ -3640,7 +6269,7 @@ function updateMarketStatus() {
         now.getMinutes();
 
 
-    const marketOpen =
+    const open =
 
         9 *
 
@@ -3649,7 +6278,7 @@ function updateMarketStatus() {
         15;
 
 
-    const marketClose =
+    const close =
 
         15 *
 
@@ -3658,208 +6287,143 @@ function updateMarketStatus() {
         30;
 
 
-    const isWeekday =
+    const isOpen =
 
         day >= 1 &&
 
-        day <= 5;
+        day <= 5 &&
 
+        minutes >= open &&
 
-    const isOpen =
+        minutes <= close;
 
-        isWeekday &&
 
-        minutes >= marketOpen &&
+    setText(
 
-        minutes <= marketClose;
+        "market-status",
 
+        isOpen
 
-    const status =
+            ? "MARKET OPEN"
 
-        query(
+            : "MARKET CLOSED"
 
-            ".market-status-card strong"
+    );
 
-        );
 
+    setText(
 
-    if (
+        "market-time",
 
-        status
+        now.toLocaleTimeString(
 
-    ) {
+            "en-IN"
 
-        status.textContent =
-
-            isOpen
-
-                ? "Market Open"
-
-                : "Market Closed";
-
-    }
-
-}
-
-
-/* =========================================================
-   HIDE ANALYSIS
-========================================================= */
-
-function hideAnalysis() {
-
-    const section =
-
-        query(
-
-            ".stock-analysis-section"
-
-        );
-
-
-    if (
-
-        section
-
-    ) {
-
-        section.classList.add(
-
-            "hidden"
-
-        );
-
-    }
-
-}
-
-
-function clearAnalysis() {
-
-    hideAnalysis();
-
-}
-
-
-/* =========================================================
-   SUGGESTION HELPERS
-========================================================= */
-
-function hideSuggestions() {
-
-    const container =
-
-        query(
-
-            ".stock-suggestions"
-
-        );
-
-
-    if (
-
-        container
-
-    ) {
-
-        container.classList.remove(
-
-            "visible"
-
-        );
-
-    }
-
-}
-
-
-function showSearchLoading() {
-
-    let container =
-
-        query(
-
-            ".stock-suggestions"
-
-        );
-
-
-    if (
-
-        !container
-
-    ) {
-
-        const searchBox =
-
-            query(
-
-                ".search-box"
-
-            );
-
-
-        if (
-
-            !searchBox
-
-        ) return;
-
-
-        container =
-
-            document.createElement(
-
-                "div"
-
-            );
-
-
-        container.className =
-
-            "stock-suggestions";
-
-
-        searchBox.appendChild(
-
-            container
-
-        );
-
-    }
-
-
-    container.innerHTML = `
-
-        <div class="no-suggestion">
-
-            Searching real stocks...
-
-        </div>
-
-    `;
-
-
-    container.classList.add(
-
-        "visible"
+        )
 
     );
 
 }
 
 
-function renderNoSuggestions(
+setInterval(
+
+    updateMarketStatus,
+
+    30000
+
+);
+
+
+/* =========================================================
+   LOADING
+========================================================= */
+
+function showLoading(
 
     message
 
 ) {
 
+    const overlay =
+
+        byId(
+
+            "loading-overlay"
+
+        );
+
+
+    if (
+
+        !overlay
+
+    ) return;
+
+
+    overlay.classList.remove(
+
+        "hidden"
+
+    );
+
+
+    const title =
+
+        overlay.querySelector(
+
+            "h3"
+
+        );
+
+
+    if (
+
+        title
+
+    ) {
+
+        title.textContent =
+
+            message;
+
+    }
+
+}
+
+
+function hideLoading() {
+
+    byId(
+
+        "loading-overlay"
+
+    )?.classList.add(
+
+        "hidden"
+
+    );
+
+}
+
+
+/* =========================================================
+   TOAST
+========================================================= */
+
+function showToast(
+
+    message,
+
+    type = "success"
+
+) {
+
     const container =
 
-        query(
+        byId(
 
-            ".stock-suggestions"
+            "toast-container"
 
         );
 
@@ -3871,30 +6435,45 @@ function renderNoSuggestions(
     ) return;
 
 
-    container.innerHTML = `
+    const toast =
 
-        <div class="no-suggestion">
+        document.createElement(
 
-            ${
+            "div"
 
-                escapeHTML(
-
-                    message ||
-
-                    "No stock found"
-
-                )
-
-            }
-
-        </div>
-
-    `;
+        );
 
 
-    container.classList.add(
+    toast.className =
 
-        "visible"
+        `toast ${
+
+            type
+
+        }`;
+
+
+    toast.textContent =
+
+        message;
+
+
+    container.appendChild(
+
+        toast
+
+    );
+
+
+    setTimeout(
+
+        () => {
+
+            toast.remove();
+
+        },
+
+        5000
 
     );
 
@@ -3902,14 +6481,45 @@ function renderNoSuggestions(
 
 
 /* =========================================================
-   UI HELPERS
+   MOBILE MENU
+========================================================= */
+
+function setupMobileMenu() {
+
+    byId(
+
+        "mobile-menu-button"
+
+    )?.addEventListener(
+
+        "click",
+
+        () => {
+
+            $("#sidebar")
+
+                ?.classList
+
+                .toggle(
+
+                    "open"
+
+                );
+
+        }
+
+    );
+
+}
+
+
+/* =========================================================
+   HELPERS
 ========================================================= */
 
 function setText(
 
-    parent,
-
-    selector,
+    id,
 
     value
 
@@ -3917,9 +6527,9 @@ function setText(
 
     const element =
 
-        parent.querySelector(
+        byId(
 
-            selector
+            id
 
         );
 
@@ -3951,9 +6561,13 @@ function formatPrice(
 
         value === undefined ||
 
-        isNaN(
+        Number.isNaN(
 
-            value
+            Number(
+
+                value
+
+            )
 
         )
 
@@ -4047,228 +6661,36 @@ function formatDate(
 }
 
 
-function updateLastUpdated() {
+function updateLastScan() {
 
-    appState.lastUpdated =
+    const time =
 
-        new Date();
+        new Date().toLocaleTimeString(
 
-
-    const element =
-
-        query(
-
-            ".last-updated"
+            "en-IN"
 
         );
 
 
-    if (
+    setText(
 
-        element
+        "footer-last-scan",
 
-    ) {
-
-        element.textContent =
-
-            `Last updated: ${
-
-                appState.lastUpdated.toLocaleTimeString(
-
-                    "en-IN"
-
-                )
-
-            }`;
-
-    }
-
-}
-
-
-/* =========================================================
-   LOADING
-========================================================= */
-
-function showLoading(
-
-    message
-
-) {
-
-    const overlay =
-
-        query(
-
-            ".loading-overlay"
-
-        );
-
-
-    if (
-
-        !overlay
-
-    ) return;
-
-
-    overlay.classList.remove(
-
-        "hidden"
+        time
 
     );
 
 
-    const title =
+    setText(
 
-        overlay.querySelector(
+        "dashboard-updated-time",
 
-            "h3"
-
-        );
-
-
-    if (
-
-        title
-
-    ) {
-
-        title.textContent =
-
-            message;
-
-    }
-
-}
-
-
-function hideLoading() {
-
-    const overlay =
-
-        query(
-
-            ".loading-overlay"
-
-        );
-
-
-    if (
-
-        overlay
-
-    ) {
-
-        overlay.classList.add(
-
-            "hidden"
-
-        );
-
-    }
-
-}
-
-
-/* =========================================================
-   TOAST
-========================================================= */
-
-function showToast(
-
-    message,
-
-    type = "success"
-
-) {
-
-    let container =
-
-        query(
-
-            ".toast-container"
-
-        );
-
-
-    if (
-
-        !container
-
-    ) {
-
-        container =
-
-            document.createElement(
-
-                "div"
-
-            );
-
-
-        container.className =
-
-            "toast-container";
-
-
-        document.body.appendChild(
-
-            container
-
-        );
-
-    }
-
-
-    const toast =
-
-        document.createElement(
-
-            "div"
-
-        );
-
-
-    toast.className =
-
-        `toast ${
-
-            type
-
-        }`;
-
-
-    toast.textContent =
-
-        message;
-
-
-    container.appendChild(
-
-        toast
-
-    );
-
-
-    setTimeout(
-
-        () => {
-
-            toast.remove();
-
-        },
-
-        4000
+        time
 
     );
 
 }
 
-
-/* =========================================================
-   HTML ESCAPE
-========================================================= */
 
 function escapeHTML(
 
@@ -4326,59 +6748,61 @@ function escapeHTML(
 
 
 /* =========================================================
-   CLOSE SUGGESTIONS WHEN CLICKING OUTSIDE
+   GZIP DECOMPRESSION
 ========================================================= */
 
-document.addEventListener(
+async function decompressGzip(
 
-    "click",
+    buffer
 
-    event => {
+) {
 
-        const searchBox =
+    if (
 
-            query(
+        typeof DecompressionStream ===
 
-                ".search-box"
+        "undefined"
+
+    ) {
+
+        throw new Error(
+
+            "Browser does not support gzip decompression."
+
+        );
+
+    }
+
+
+    const stream =
+
+        new Blob(
+
+            [
+
+                buffer
+
+            ]
+
+        )
+
+            .stream()
+
+            .pipeThrough(
+
+                new DecompressionStream(
+
+                    "gzip"
+
+                )
 
             );
 
 
-        if (
+    return await new Response(
 
-            searchBox &&
+        stream
 
-            !searchBox.contains(
+    ).text();
 
-                event.target
-
-            )
-
-        ) {
-
-            hideSuggestions();
-
-        }
-
-    }
-
-);
-
-
-/* =========================================================
-   GLOBAL FUNCTIONS
-========================================================= */
-
-window.searchStocks =
-
-    searchStocks;
-
-
-window.selectStock =
-
-    selectStock;
-
-
-window.analyzeSelectedStock =
-
-    analyzeSelectedStock;
+}
