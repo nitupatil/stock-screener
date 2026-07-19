@@ -40,13 +40,9 @@
             <span class="badge">Intraday Engine</span>
         </div>
         
-        <!-- Upstox API Credentials Configuration -->
-        <div class="api-config-panel">
-            <div class="input-group">
-                <label for="access-token">Upstox Access Token</label>
-                <input type="password" id="access-token" placeholder="Paste runtime access token..." autocomplete="off">
-            </div>
-            <button id="btn-connect" class="btn-primary">Connect Stream</button>
+        <!-- Live Status Panel -->
+        <div class="api-config-panel" style="background: transparent; border: none; box-shadow: none;">
+            <span id="status-text" style="font-family: var(--font-mono); font-size: 0.9rem; color: var(--color-text-muted);">Initializing...</span>
             <span id="connection-status" class="status-dot disconnected"></span>
         </div>
     </header>
@@ -59,13 +55,13 @@
             <div class="card search-card">
                 <h2>Symbol Search</h2>
                 <div class="search-box">
-                    <input type="text" id="stock-search-input" placeholder="Search stock (e.g., RELIANCE, TCS)..." autocomplete="off">
+                    <input type="text" id="stock-search-input" placeholder="Search stock (e.g., NSE_EQ|INE467B01029)..." autocomplete="off">
                     <div id="search-results-dropdown" class="dropdown-content hidden"></div>
                 </div>
             </div>
 
             <!-- Detailed Analysis Panel for Selected Stock -->
-            <div class="card analysis-card id="detailed-analysis-view">
+            <div class="card analysis-card" id="detailed-analysis-view">
                 <div class="analysis-header">
                     <h2 id="active-symbol">Select a Stock</h2>
                     <div class="live-price-block">
@@ -150,7 +146,7 @@
                         <tbody id="buy-screener-body">
                             <!-- Populated dynamically via script.js -->
                             <tr class="placeholder-row">
-                                <td colspan="5">Connect your access token to view intraday ranked heatmaps.</td>
+                                <td colspan="5">Search for stocks to analyze intraday momentum.</td>
                             </tr>
                         </tbody>
                     </table>
