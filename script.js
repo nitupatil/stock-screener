@@ -861,7 +861,7 @@ function setupSearch() {
 
             const text =
 
-                event.target.value.trim();
+                event.target.value;
 
 
             clearTimeout(
@@ -873,7 +873,7 @@ function setupSearch() {
 
             if (
 
-                text.length < 2
+                text.trim().length < 2
 
             ) {
 
@@ -890,7 +890,7 @@ function setupSearch() {
 
                     () => {
 
-                        renderSearchSuggestions(
+                        searchStocks(
 
                             text
 
@@ -963,138 +963,159 @@ function setupSearch() {
 
 }
 
+function searchStocks(query) {
 
-function renderSearchSuggestions(
+    const searchText = query
 
-    text
+        .trim()
 
-) {
+        .toLowerCase();
 
-    const search =
+    if (searchText.length < 2) {
 
-        text.toLowerCase();
+        hideSuggestions();
 
+        return;
 
-    const matches =
+    }
 
-        state.instruments
+    if (!state.instruments || !state.instruments.length) {
 
-            .filter(
+        console.warn(
 
-                instrument => {
+            "Instrument list is not loaded yet."
 
-                    const symbol =
+        );
 
-                        String(
+        showToast(
 
-                            instrument.trading_symbol ||
+            "Stock database is still loading.",
 
-                            ""
+            "warning"
 
-                        ).toLowerCase();
+        );
 
+        return;
 
-                    const name =
+    }
 
-                        String(
+    const matches = state.instruments
 
-                            instrument.name ||
+        .filter(instrument => {
 
-                            ""
+            const symbol = String(
 
-                        ).toLowerCase();
+                instrument.trading_symbol || ""
 
+            ).toLowerCase();
 
-                    return (
+            const name = String(
 
-                        symbol.includes(
+                instrument.name ||
 
-                            search
+                instrument.short_name ||
 
-                        ) ||
+                ""
 
-                        name.includes(
+            ).toLowerCase();
 
-                            search
+            const isin = String(
 
-                        )
+                instrument.isin ||
 
-                    );
+                ""
 
-                }
+            ).toLowerCase();
 
-            )
+            return (
 
-            .filter(
+                symbol.includes(searchText) ||
 
-                instrument =>
+                name.includes(searchText) ||
 
-                    instrument.instrument_key
-
-            )
-
-            .slice(
-
-                0,
-
-                10
+                isin.includes(searchText)
 
             );
 
+        })
 
-    let container =
+        .filter(instrument => {
 
-        $(".stock-suggestions");
+            return (
 
+                instrument.instrument_key &&
 
-    if (
+                (
 
-        !container
+                    instrument.exchange === "NSE_EQ" ||
 
-    ) {
+                    instrument.exchange === "BSE_EQ"
 
-        container =
-
-            document.createElement(
-
-                "div"
+                )
 
             );
 
+        })
+
+        .slice(0, 10);
+
+    renderSearchSuggestions(matches);
+
+}
+
+function renderSearchSuggestions(matches) {
+
+    let container = document.querySelector(
+
+        ".stock-suggestions"
+
+    );
+
+    if (!container) {
+
+        container = document.createElement(
+
+            "div"
+
+        );
 
         container.className =
 
             "stock-suggestions";
 
+        const searchBox =
 
-        $(".search-box")?.appendChild(
+            document.querySelector(
 
-            container
+                ".search-box"
 
-        );
+            );
+
+        if (searchBox) {
+
+            searchBox.appendChild(
+
+                container
+
+            );
+
+        }
 
     }
 
-
     container.innerHTML = "";
 
-
-    if (
-
-        !matches.length
-
-    ) {
+    if (!matches.length) {
 
         container.innerHTML = `
 
             <div class="no-suggestion">
 
-                No real stock found
+                No matching real stock found
 
             </div>
 
         `;
-
 
         container.classList.add(
 
@@ -1102,118 +1123,93 @@ function renderSearchSuggestions(
 
         );
 
-
         return;
 
     }
 
+    matches.forEach(instrument => {
 
-    matches.forEach(
+        const item =
 
-        instrument => {
+            document.createElement(
 
-            const item =
+                "div"
 
-                document.createElement(
+            );
 
-                    "div"
+        item.className =
+
+            "stock-suggestion";
+
+        item.innerHTML = `
+
+            <div>
+
+                <strong>
+
+                    ${escapeHTML(
+
+                        instrument.trading_symbol ||
+
+                        instrument.short_name ||
+
+                        "Unknown"
+
+                    )}
+
+                </strong>
+
+                <span>
+
+                    ${escapeHTML(
+
+                        instrument.name ||
+
+                        "Unknown company"
+
+                    )}
+
+                </span>
+
+            </div>
+
+            <small>
+
+                ${escapeHTML(
+
+                    instrument.exchange ||
+
+                    ""
+
+                )}
+
+            </small>
+
+        `;
+
+        item.addEventListener(
+
+            "click",
+
+            async () => {
+
+                await selectStock(
+
+                    instrument
 
                 );
 
+            }
 
-            item.className =
+        );
 
-                "stock-suggestion";
+        container.appendChild(
 
+            item
 
-            item.innerHTML = `
+        );
 
-                <div>
-
-                    <strong>
-
-                        ${
-
-                            escapeHTML(
-
-                                instrument.trading_symbol ||
-
-                                instrument.short_name ||
-
-                                "Unknown"
-
-                            )
-
-                        }
-
-                    </strong>
-
-
-                    <span>
-
-                        ${
-
-                            escapeHTML(
-
-                                instrument.name ||
-
-                                "Unknown company"
-
-                            )
-
-                        }
-
-                    </span>
-
-                </div>
-
-
-                <small>
-
-                    ${
-
-                        escapeHTML(
-
-                            instrument.exchange ||
-
-                            ""
-
-                        )
-
-                    }
-
-                </small>
-
-            `;
-
-
-            item.addEventListener(
-
-                "click",
-
-                () => {
-
-                    selectStock(
-
-                        instrument
-
-                    );
-
-                }
-
-            );
-
-
-            container.appendChild(
-
-                item
-
-            );
-
-        }
-
-    );
-
+    });
 
     container.classList.add(
 
