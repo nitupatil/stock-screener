@@ -1,11 +1,12 @@
 /**
  * IntraPulse Engine - Upstox API Integration
- * Auto-Connect & Autocomplete Version
+ * Auto-Connect, Autocomplete, & CORS Bypass Version
  */
 
 const UPSTOX_BASE_URL = 'https://api.upstox.com/v2';
+const PROXY_URL = 'https://corsproxy.io/?';
 
-// ⚠️ PASTE YOUR ACCESS TOKEN HERE 
+// ⚠️ PASTE YOUR FRESH ACCESS TOKEN HERE (Tokens expire every midnight)
 let accessToken = 'eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiJKUjIxMjQiLCJqdGkiOiI2YTVkMjcxZDJiOWNhODI2YTkwZDgyNjciLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6dHJ1ZSwiaWF0IjoxNzg0NDg5NzU3LCJpc3MiOiJ1ZGFwaS1nYXRld2F5LXNlcnZpY2UiLCJleHAiOjE3ODQ0OTg0MDB9.lFeQgaRRGfAzuWfGdp5TgfZrryTzFj8G1tzJnqYZCQI'; 
 
 let activeInstrument = '';
@@ -122,20 +123,31 @@ document.addEventListener('click', function(e) {
     }
 });
 
-// --- Main API Fetch Controllers ---
+// --- Main API Fetch Controllers (WITH CORS BYPASS) ---
 async function fetchQuotes(instrumentKeys) {
     const keysParam = Array.isArray(instrumentKeys) 
         ? instrumentKeys.map(key => encodeURIComponent(key)).join(',') 
         : encodeURIComponent(instrumentKeys);
         
+    const targetUrl = `${UPSTOX_BASE_URL}/market-quote/quotes?instrument_key=${keysParam}`;
+    const fetchUrl = PROXY_URL + encodeURIComponent(targetUrl);
+
     try {
-        const response = await fetch(`${UPSTOX_BASE_URL}/market-quote/quotes?instrument_key=${keysParam}`, {
+        const response = await fetch(fetchUrl, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json',
                 'Authorization': `Bearer ${accessToken}`
             }
         });
+        
+        // If it throws a 401, the token is expired.
+        if (response.status === 401) {
+            dom.statusText.textContent = "Token Expired! Need a new one.";
+            dom.statusText.style.color = "var(--color-sell)";
+            return null;
+        }
+
         const data = await response.json();
         
         if (data.status === 'success') {
@@ -144,15 +156,18 @@ async function fetchQuotes(instrumentKeys) {
         throw new Error(data.errors?.[0]?.message || 'API Error');
     } catch (error) {
         console.error("Quote Fetch Error:", error);
-        dom.statusText.textContent = "API Error (Check Console / Token Expired)";
+        dom.statusText.textContent = "API or Proxy Error (Check Console)";
         dom.statusText.style.color = "var(--color-sell)";
         return null;
     }
 }
 
 async function fetchIntradayCandles(instrumentKey) {
+    const targetUrl = `${UPSTOX_BASE_URL}/historical-candle/intraday/${encodeURIComponent(instrumentKey)}/1minute`;
+    const fetchUrl = PROXY_URL + encodeURIComponent(targetUrl);
+
     try {
-        const response = await fetch(`${UPSTOX_BASE_URL}/historical-candle/intraday/${encodeURIComponent(instrumentKey)}/1minute`, {
+        const response = await fetch(fetchUrl, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json',
