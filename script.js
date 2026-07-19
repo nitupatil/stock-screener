@@ -1,226 +1,53 @@
 /* =========================================================
-   STOCK ANALYZER
-   Frontend JavaScript
-   ========================================================= */
+   REAL-TIME INDIAN STOCK TECHNICAL ANALYZER
+   Data Provider: Upstox API
 
-/*
-IMPORTANT:
+   Required:
+   - Upstox Access Token
 
-Do NOT put your Upstox API Secret here.
+   This version does NOT create fake stock data.
+   A stock must be found and selected before analysis.
+========================================================= */
 
-The API Secret is private and must not be exposed in frontend code.
 
-For development, use an access token here only temporarily.
+/* =========================================================
+   CONFIGURATION
+========================================================= */
 
-After you generate an Upstox access token, paste it below.
-*/
-
+// Paste your valid Upstox access token here
 const UPSTOX_ACCESS_TOKEN = "eyJ0eXAiOiJKV1QiLCJrZXlfaWQiOiJza192MS4wIiwiYWxnIjoiSFMyNTYifQ.eyJzdWIiOiJKUjIxMjQiLCJqdGkiOiI2YTVkMTZjNjA4YzFiODBkMjMyNzY2MzMiLCJpc011bHRpQ2xpZW50IjpmYWxzZSwiaXNQbHVzUGxhbiI6dHJ1ZSwiaWF0IjoxNzg0NDg1NTc0LCJpc3MiOiJ1ZGFwaS1nYXRld2F5LXNlcnZpY2UiLCJleHAiOjE3ODQ0OTg0MDB9._dlwsYewbVmcLDOibXkOOXE41qznjbuQJoka3IIjTqQ";
 
 const UPSTOX_API_BASE = "https://api.upstox.com/v2";
 
 
-// =========================================================
-// APPLICATION STATE
-// =========================================================
+/* =========================================================
+   APPLICATION STATE
+========================================================= */
 
 const appState = {
 
-    selectedStock: null,
+    selectedInstrument: null,
 
-    currentFilter: "all",
+    selectedQuote: null,
+
+    candles: [],
+
+    indicators: null,
+
+    analysis: null,
+
+    searchTimeout: null,
 
     isLoading: false,
-
-    stocks: [],
-
-    indices: [],
 
     lastUpdated: null
 
 };
 
 
-// =========================================================
-// STOCK SYMBOL DATABASE
-// =========================================================
-
-const STOCKS = {
-
-    RELIANCE: {
-
-        symbol: "RELIANCE",
-
-        name: "Reliance Industries",
-
-        instrumentKey: "NSE_EQ|INE002A01018",
-
-        exchange: "NSE"
-
-    },
-
-    TCS: {
-
-        symbol: "TCS",
-
-        name: "Tata Consultancy Services",
-
-        instrumentKey: "NSE_EQ|INE467B01029",
-
-        exchange: "NSE"
-
-    },
-
-    INFY: {
-
-        symbol: "INFY",
-
-        name: "Infosys",
-
-        instrumentKey: "NSE_EQ|INE009A01021",
-
-        exchange: "NSE"
-
-    },
-
-    HDFCBANK: {
-
-        symbol: "HDFCBANK",
-
-        name: "HDFC Bank",
-
-        instrumentKey: "NSE_EQ|INE040A01034",
-
-        exchange: "NSE"
-
-    },
-
-    ICICIBANK: {
-
-        symbol: "ICICIBANK",
-
-        name: "ICICI Bank",
-
-        instrumentKey: "NSE_EQ|INE090A01021",
-
-        exchange: "NSE"
-
-    },
-
-    SBIN: {
-
-        symbol: "SBIN",
-
-        name: "State Bank of India",
-
-        instrumentKey: "NSE_EQ|INE062A01020",
-
-        exchange: "NSE"
-
-    },
-
-    BHARTIARTL: {
-
-        symbol: "BHARTIARTL",
-
-        name: "Bharti Airtel",
-
-        instrumentKey: "NSE_EQ|INE397D01024",
-
-        exchange: "NSE"
-
-    },
-
-    ITC: {
-
-        symbol: "ITC",
-
-        name: "ITC Limited",
-
-        instrumentKey: "NSE_EQ|INE154A01025",
-
-        exchange: "NSE"
-
-    },
-
-    LT: {
-
-        symbol: "LT",
-
-        name: "Larsen & Toubro",
-
-        instrumentKey: "NSE_EQ|INE018A01030",
-
-        exchange: "NSE"
-
-    },
-
-    AXISBANK: {
-
-        symbol: "AXISBANK",
-
-        name: "Axis Bank",
-
-        instrumentKey: "NSE_EQ|INE238A01034",
-
-        exchange: "NSE"
-
-    }
-
-};
-
-
-// =========================================================
-// INDEXES
-// =========================================================
-
-const INDEXES = {
-
-    NIFTY50: {
-
-        symbol: "NIFTY 50",
-
-        instrumentKey: "NSE_INDEX|Nifty 50"
-
-    },
-
-    BANKNIFTY: {
-
-        symbol: "BANK NIFTY",
-
-        instrumentKey: "NSE_INDEX|Nifty Bank"
-
-    },
-
-    FINNIFTY: {
-
-        symbol: "FINNIFTY",
-
-        instrumentKey: "NSE_INDEX|Nifty Fin Service"
-
-    },
-
-    MIDCPNIFTY: {
-
-        symbol: "MIDCAP NIFTY",
-
-        instrumentKey: "NSE_INDEX|Nifty Midcap 50"
-
-    }
-
-};
-
-
-// =========================================================
-// DOM HELPERS
-// =========================================================
-
-function getElement(id) {
-
-    return document.getElementById(id);
-
-}
-
+/* =========================================================
+   DOM HELPERS
+========================================================= */
 
 function query(selector) {
 
@@ -236,1603 +63,87 @@ function queryAll(selector) {
 }
 
 
-function formatPrice(price) {
+function getElement(id) {
 
-    if (!price || isNaN(price)) {
+    return document.getElementById(id);
 
-        return "₹0.00";
+}
+
+
+/* =========================================================
+   INITIALIZATION
+========================================================= */
+
+document.addEventListener(
+
+    "DOMContentLoaded",
+
+    () => {
+
+        initializeApp();
 
     }
 
-    return `₹${Number(price).toLocaleString("en-IN", {
-
-        minimumFractionDigits: 2,
-
-        maximumFractionDigits: 2
-
-    })}`;
-
-}
+);
 
 
-function formatPercent(value) {
-
-    const number = Number(value || 0);
-
-    return `${number >= 0 ? "+" : ""}${number.toFixed(2)}%`;
-
-}
-
-
-function formatNumber(value) {
-
-    return Number(value || 0).toLocaleString("en-IN");
-
-}
-
-
-// =========================================================
-// INITIALIZATION
-// =========================================================
-
-document.addEventListener("DOMContentLoaded", () => {
-
-    initializeApplication();
-
-});
-
-
-function initializeApplication() {
-
-    setupNavigation();
+function initializeApp() {
 
     setupSearch();
 
-    setupFilters();
-
     setupRefreshButton();
+
+    setupNavigation();
 
     setupMobileMenu();
 
-    loadInitialDashboard();
+    hideAnalysis();
 
-}
+    updateMarketStatus();
 
+    setInterval(
 
-// =========================================================
-// INITIAL DASHBOARD
-// =========================================================
+        updateMarketStatus,
 
-async function loadInitialDashboard() {
-
-    showLoading("Loading market data...");
-
-    try {
-
-        renderDemoMarketData();
-
-        renderDemoTopStocks();
-
-        renderDemoGainers();
-
-        renderDemoLosers();
-
-        renderDemoIndicators();
-
-        updateMarketStatus();
-
-        updateLastUpdated();
-
-    }
-
-    catch (error) {
-
-        console.error(error);
-
-        showToast(
-
-            "Unable to load market data",
-
-            "error"
-
-        );
-
-    }
-
-    finally {
-
-        hideLoading();
-
-    }
-
-}
-
-
-// =========================================================
-// DEMO MARKET DATA
-// =========================================================
-
-function renderDemoMarketData() {
-
-    const demoIndexes = [
-
-        {
-
-            name: "NIFTY 50",
-
-            symbol: "NIFTY",
-
-            price: 24850.40,
-
-            change: 1.24
-
-        },
-
-        {
-
-            name: "BANK NIFTY",
-
-            symbol: "BANK",
-
-            price: 56240.70,
-
-            change: 0.86
-
-        },
-
-        {
-
-            name: "FINNIFTY",
-
-            symbol: "FIN",
-
-            price: 26450.15,
-
-            change: -0.35
-
-        },
-
-        {
-
-            name: "SENSEX",
-
-            symbol: "SENSEX",
-
-            price: 81450.32,
-
-            change: 0.91
-
-        }
-
-    ];
-
-    appState.indices = demoIndexes;
-
-    const container = query(".index-grid");
-
-    if (!container) return;
-
-    container.innerHTML = "";
-
-    demoIndexes.forEach(index => {
-
-        const card = document.createElement("div");
-
-        card.className = "index-card fade-in";
-
-        card.innerHTML = `
-
-            <div class="index-card-header">
-
-                <div>
-
-                    <div class="index-name">
-
-                        ${index.name}
-
-                    </div>
-
-                    <div class="index-symbol">
-
-                        ${index.symbol}
-
-                    </div>
-
-                </div>
-
-            </div>
-
-            <div class="index-price">
-
-                ${formatPrice(index.price)}
-
-            </div>
-
-            <div class="index-change ${index.change >= 0 ? "positive" : "negative"}">
-
-                ${index.change >= 0 ? "▲" : "▼"}
-
-                ${formatPercent(index.change)}
-
-            </div>
-
-        `;
-
-        container.appendChild(card);
-
-    });
-
-}
-
-
-// =========================================================
-// DEMO TOP STOCKS
-// =========================================================
-
-function renderDemoTopStocks() {
-
-    const stocks = [
-
-        {
-
-            symbol: "RELIANCE",
-
-            name: "Reliance Industries",
-
-            price: 1465.40,
-
-            change: 4.86,
-
-            score: 92,
-
-            signal: "STRONG BUY",
-
-            rsi: 61,
-
-            macd: "Bullish",
-
-            trend: "Bullish",
-
-            volume: "High"
-
-        },
-
-        {
-
-            symbol: "ICICIBANK",
-
-            name: "ICICI Bank",
-
-            price: 1324.20,
-
-            change: 3.72,
-
-            score: 87,
-
-            signal: "BUY",
-
-            rsi: 58,
-
-            macd: "Bullish",
-
-            trend: "Bullish",
-
-            volume: "High"
-
-        },
-
-        {
-
-            symbol: "BHARTIARTL",
-
-            name: "Bharti Airtel",
-
-            price: 1894.70,
-
-            change: 3.25,
-
-            score: 84,
-
-            signal: "BUY",
-
-            rsi: 55,
-
-            macd: "Bullish",
-
-            trend: "Bullish",
-
-            volume: "High"
-
-        },
-
-        {
-
-            symbol: "TCS",
-
-            name: "Tata Consultancy Services",
-
-            price: 3521.10,
-
-            change: 2.14,
-
-            score: 79,
-
-            signal: "BUY",
-
-            rsi: 54,
-
-            macd: "Bullish",
-
-            trend: "Neutral",
-
-            volume: "Medium"
-
-        },
-
-        {
-
-            symbol: "INFY",
-
-            name: "Infosys",
-
-            price: 1785.25,
-
-            change: 1.94,
-
-            score: 76,
-
-            signal: "BUY",
-
-            rsi: 52,
-
-            macd: "Bullish",
-
-            trend: "Bullish",
-
-            volume: "Medium"
-
-        }
-
-    ];
-
-    appState.stocks = stocks;
-
-    renderOpportunityTable(stocks);
-
-}
-
-
-// =========================================================
-// OPPORTUNITY TABLE
-// =========================================================
-
-function renderOpportunityTable(stocks) {
-
-    const tbody = query(".opportunity-table tbody");
-
-    if (!tbody) return;
-
-    tbody.innerHTML = "";
-
-    stocks.forEach(stock => {
-
-        const row = document.createElement("tr");
-
-        row.className = "fade-in";
-
-        const signalClass =
-
-            stock.signal.includes("BUY")
-
-                ? "signal-buy"
-
-                : stock.signal.includes("SELL")
-
-                    ? "signal-sell"
-
-                    : "signal-neutral";
-
-        row.innerHTML = `
-
-            <td>
-
-                <div class="stock-name-cell">
-
-                    <div class="stock-logo">
-
-                        ${stock.symbol.substring(0, 2)}
-
-                    </div>
-
-                    <div>
-
-                        <div class="stock-name">
-
-                            ${stock.symbol}
-
-                        </div>
-
-                        <span class="stock-company">
-
-                            ${stock.name}
-
-                        </span>
-
-                    </div>
-
-                </div>
-
-            </td>
-
-            <td>
-
-                ${formatPrice(stock.price)}
-
-            </td>
-
-            <td class="${stock.change >= 0 ? "positive" : "negative"}">
-
-                ${formatPercent(stock.change)}
-
-            </td>
-
-            <td>
-
-                <span class="score-value">
-
-                    ${stock.score}/100
-
-                </span>
-
-            </td>
-
-            <td>
-
-                <span class="signal-badge ${signalClass}">
-
-                    ${stock.signal}
-
-                </span>
-
-            </td>
-
-            <td>
-
-                ${stock.rsi}
-
-            </td>
-
-            <td>
-
-                <button
-
-                    class="table-action-button"
-
-                    onclick="analyzeStock('${stock.symbol}')">
-
-                    Analyze
-
-                </button>
-
-            </td>
-
-        `;
-
-        tbody.appendChild(row);
-
-    });
-
-}
-
-
-// =========================================================
-// GAINERS
-// =========================================================
-
-function renderDemoGainers() {
-
-    const container = query(".gainers-losers-section");
-
-    if (!container) return;
-
-    const cards = container.querySelectorAll(".stock-list-card");
-
-    if (!cards[0]) return;
-
-    const gainers = [
-
-        ["RELIANCE", "₹1,465.40", "+4.86%"],
-
-        ["ICICIBANK", "₹1,324.20", "+3.72%"],
-
-        ["BHARTIARTL", "₹1,894.70", "+3.25%"],
-
-        ["TCS", "₹3,521.10", "+2.14%"],
-
-        ["INFY", "₹1,785.25", "+1.94%"]
-
-    ];
-
-    renderMiniStockList(
-
-        cards[0],
-
-        gainers,
-
-        true
+        30000
 
     );
 
 }
 
 
-// =========================================================
-// LOSERS
-// =========================================================
+/* =========================================================
+   API REQUEST
+========================================================= */
 
-function renderDemoLosers() {
+async function upstoxRequest(
 
-    const container = query(".gainers-losers-section");
-
-    if (!container) return;
-
-    const cards = container.querySelectorAll(".stock-list-card");
-
-    if (!cards[1]) return;
-
-    const losers = [
-
-        ["ADANIENT", "₹2,410.50", "-3.44%"],
-
-        ["TATASTEEL", "₹162.40", "-2.82%"],
-
-        ["HINDALCO", "₹714.20", "-2.11%"],
-
-        ["WIPRO", "₹514.35", "-1.84%"],
-
-        ["MARUTI", "₹12,420.00", "-1.52%"]
-
-    ];
-
-    renderMiniStockList(
-
-        cards[1],
-
-        losers,
-
-        false
-
-    );
-
-}
-
-
-// =========================================================
-// MINI STOCK LIST
-// =========================================================
-
-function renderMiniStockList(
-
-    card,
-
-    stocks,
-
-    isPositive
+    endpoint
 
 ) {
-
-    let list = card.querySelector(".mini-stock-list");
-
-    if (!list) {
-
-        list = document.createElement("div");
-
-        list.className = "mini-stock-list";
-
-        card.appendChild(list);
-
-    }
-
-    list.innerHTML = "";
-
-    stocks.forEach(stock => {
-
-        const item = document.createElement("div");
-
-        item.className = "mini-stock-item";
-
-        item.innerHTML = `
-
-            <div class="mini-stock-info">
-
-                <div>
-
-                    <div class="mini-stock-symbol">
-
-                        ${stock[0]}
-
-                    </div>
-
-                    <div class="mini-stock-price">
-
-                        ${stock[1]}
-
-                    </div>
-
-                </div>
-
-            </div>
-
-            <div class="mini-stock-change
-
-                ${isPositive ? "positive" : "negative"}">
-
-                ${stock[2]}
-
-            </div>
-
-        `;
-
-        list.appendChild(item);
-
-    });
-
-}
-
-
-// =========================================================
-// INDICATOR ANALYSIS
-// =========================================================
-
-function renderDemoIndicators() {
-
-    const indicatorGrid = query(".indicator-grid");
-
-    if (!indicatorGrid) return;
-
-    const indicators = [
-
-        {
-
-            name: "RSI",
-
-            signal: "BUY",
-
-            value: "61.4 - Bullish"
-
-        },
-
-        {
-
-            name: "MACD",
-
-            signal: "BUY",
-
-            value: "Bullish crossover"
-
-        },
-
-        {
-
-            name: "EMA 20/50",
-
-            signal: "BUY",
-
-            value: "20 EMA above 50 EMA"
-
-        },
-
-        {
-
-            name: "SMA 200",
-
-            signal: "BUY",
-
-            value: "Price above SMA 200"
-
-        },
-
-        {
-
-            name: "Bollinger Bands",
-
-            signal: "BUY",
-
-            value: "Upper half movement"
-
-        },
-
-        {
-
-            name: "ADX",
-
-            signal: "BUY",
-
-            value: "Strong trend"
-
-        },
-
-        {
-
-            name: "Volume",
-
-            signal: "BUY",
-
-            value: "Above average"
-
-        },
-
-        {
-
-            name: "Stochastic",
-
-            signal: "NEUTRAL",
-
-            value: "68.2"
-
-        }
-
-    ];
-
-    indicatorGrid.innerHTML = "";
-
-    indicators.forEach(indicator => {
-
-        const card = document.createElement("div");
-
-        card.className = "indicator-card";
-
-        const signalClass =
-
-            indicator.signal === "BUY"
-
-                ? "positive"
-
-                : indicator.signal === "SELL"
-
-                    ? "negative"
-
-                    : "neutral";
-
-        card.innerHTML = `
-
-            <div class="indicator-name">
-
-                ${indicator.name}
-
-            </div>
-
-            <div class="indicator-signal ${signalClass}">
-
-                ${indicator.signal}
-
-            </div>
-
-            <div class="indicator-value">
-
-                ${indicator.value}
-
-            </div>
-
-        `;
-
-        indicatorGrid.appendChild(card);
-
-    });
-
-}
-
-
-// =========================================================
-// SEARCH
-// =========================================================
-
-function setupSearch() {
-
-    const input = query(
-
-        "#stockSearch, .search-box input"
-
-    );
-
-    const button = query(
-
-        "#searchButton, .search-button"
-
-    );
-
-    if (!input) return;
-
-    input.addEventListener(
-
-        "keydown",
-
-        event => {
-
-            if (event.key === "Enter") {
-
-                searchStock(input.value);
-
-            }
-
-        }
-
-    );
-
-    if (button) {
-
-        button.addEventListener(
-
-            "click",
-
-            () => {
-
-                searchStock(input.value);
-
-            }
-
-        );
-
-    }
-
-}
-
-
-async function searchStock(searchValue) {
-
-    const value = searchValue
-
-        .trim()
-
-        .toUpperCase();
-
-    if (!value) {
-
-        showToast(
-
-            "Enter a stock symbol",
-
-            "warning"
-
-        );
-
-        return;
-
-    }
-
-    showLoading(
-
-        `Analyzing ${value}...`
-
-    );
-
-    try {
-
-        const stock =
-
-            STOCKS[value] ||
-
-            {
-
-                symbol: value,
-
-                name: value,
-
-                price: 0,
-
-                change: 0,
-
-                score: 72,
-
-                signal: "BUY",
-
-                rsi: 55,
-
-                macd: "Bullish",
-
-                trend: "Bullish",
-
-                volume: "Medium"
-
-            };
-
-        appState.selectedStock = stock;
-
-        renderStockAnalysis(stock);
-
-        showToast(
-
-            `${value} analysis completed`,
-
-            "success"
-
-        );
-
-    }
-
-    catch (error) {
-
-        console.error(error);
-
-        showToast(
-
-            "Stock analysis failed",
-
-            "error"
-
-        );
-
-    }
-
-    finally {
-
-        hideLoading();
-
-    }
-
-}
-
-
-// =========================================================
-// STOCK ANALYSIS
-// =========================================================
-
-function analyzeStock(symbol) {
-
-    const stock = appState.stocks.find(
-
-        item => item.symbol === symbol
-
-    );
-
-    if (stock) {
-
-        appState.selectedStock = stock;
-
-        renderStockAnalysis(stock);
-
-        window.scrollTo({
-
-            top: 0,
-
-            behavior: "smooth"
-
-        });
-
-    }
-
-}
-
-
-function renderStockAnalysis(stock) {
-
-    const analysisSection =
-
-        query(".stock-analysis-section");
-
-    if (!analysisSection) return;
-
-    analysisSection.classList.remove("hidden");
-
-    const symbolElement =
-
-        analysisSection.querySelector(
-
-            ".analysis-symbol"
-
-        );
-
-    const priceElement =
-
-        analysisSection.querySelector(
-
-            ".analysis-price"
-
-        );
-
-    const changeElement =
-
-        analysisSection.querySelector(
-
-            ".analysis-price-change"
-
-        );
-
-    const signalElement =
-
-        analysisSection.querySelector(
-
-            ".large-signal-badge"
-
-        );
-
-    const scoreElement =
-
-        analysisSection.querySelector(
-
-            ".technical-score strong"
-
-        );
-
-    if (symbolElement) {
-
-        symbolElement.textContent = stock.symbol;
-
-    }
-
-    if (priceElement) {
-
-        priceElement.textContent =
-
-            formatPrice(stock.price);
-
-    }
-
-    if (changeElement) {
-
-        changeElement.textContent =
-
-            formatPercent(stock.change);
-
-    }
-
-    if (signalElement) {
-
-        signalElement.textContent =
-
-            stock.signal;
-
-    }
-
-    if (scoreElement) {
-
-        scoreElement.textContent =
-
-            `${stock.score}/100`;
-
-    }
-
-    calculateTradeLevels(stock);
-
-    renderAnalysisIndicators(stock);
-
-}
-
-
-// =========================================================
-// TRADE LEVEL CALCULATION
-// =========================================================
-
-function calculateTradeLevels(stock) {
-
-    const price = Number(stock.price || 1000);
-
-    const entry = price;
-
-    const stopLoss = price * 0.985;
-
-    const target1 = price * 1.02;
-
-    const target2 = price * 1.04;
-
-    const values = {
-
-        entry: formatPrice(entry),
-
-        stopLoss: formatPrice(stopLoss),
-
-        target1: formatPrice(target1),
-
-        target2: formatPrice(target2)
-
-    };
-
-    const cards =
-
-        document.querySelectorAll(
-
-            ".trade-level-card strong"
-
-        );
-
-    if (cards.length >= 4) {
-
-        cards[0].textContent = values.entry;
-
-        cards[1].textContent = values.target1;
-
-        cards[2].textContent = values.stopLoss;
-
-        cards[3].textContent = values.target2;
-
-    }
-
-}
-
-
-// =========================================================
-// ANALYSIS INDICATORS
-// =========================================================
-
-function renderAnalysisIndicators(stock) {
-
-    const grid = query(".indicator-grid");
-
-    if (!grid) return;
-
-    const rsi = Number(stock.rsi || 50);
-
-    const indicators = [
-
-        {
-
-            name: "RSI",
-
-            signal:
-
-                rsi > 70
-
-                    ? "SELL"
-
-                    : rsi < 30
-
-                        ? "BUY"
-
-                        : "BUY",
-
-            value: rsi
-
-        },
-
-        {
-
-            name: "MACD",
-
-            signal:
-
-                stock.macd === "Bullish"
-
-                    ? "BUY"
-
-                    : "SELL",
-
-            value: stock.macd
-
-        },
-
-        {
-
-            name: "Trend",
-
-            signal:
-
-                stock.trend === "Bullish"
-
-                    ? "BUY"
-
-                    : "NEUTRAL",
-
-            value: stock.trend
-
-        },
-
-        {
-
-            name: "Volume",
-
-            signal:
-
-                stock.volume === "High"
-
-                    ? "BUY"
-
-                    : "NEUTRAL",
-
-            value: stock.volume
-
-        },
-
-        {
-
-            name: "EMA",
-
-            signal: "BUY",
-
-            value: "Bullish alignment"
-
-        },
-
-        {
-
-            name: "Bollinger Bands",
-
-            signal: "NEUTRAL",
-
-            value: "Middle zone"
-
-        }
-
-    ];
-
-    grid.innerHTML = "";
-
-    indicators.forEach(indicator => {
-
-        const card = document.createElement("div");
-
-        card.className = "indicator-card";
-
-        const signalClass =
-
-            indicator.signal === "BUY"
-
-                ? "positive"
-
-                : indicator.signal === "SELL"
-
-                    ? "negative"
-
-                    : "neutral";
-
-        card.innerHTML = `
-
-            <div class="indicator-name">
-
-                ${indicator.name}
-
-            </div>
-
-            <div class="indicator-signal ${signalClass}">
-
-                ${indicator.signal}
-
-            </div>
-
-            <div class="indicator-value">
-
-                ${indicator.value}
-
-            </div>
-
-        `;
-
-        grid.appendChild(card);
-
-    });
-
-}
-
-
-// =========================================================
-// FILTERS
-// =========================================================
-
-function setupFilters() {
-
-    const buttons =
-
-        queryAll(".filter-button");
-
-    buttons.forEach(button => {
-
-        button.addEventListener(
-
-            "click",
-
-            () => {
-
-                buttons.forEach(
-
-                    item => item.classList.remove("active")
-
-                );
-
-                button.classList.add("active");
-
-                const filter =
-
-                    button.dataset.filter ||
-
-                    button.textContent
-
-                        .trim()
-
-                        .toLowerCase();
-
-                appState.currentFilter = filter;
-
-                applyStockFilter(filter);
-
-            }
-
-        );
-
-    });
-
-}
-
-
-function applyStockFilter(filter) {
-
-    let stocks = [...appState.stocks];
 
     if (
 
-        filter.includes("buy") ||
+        !UPSTOX_ACCESS_TOKEN ||
 
-        filter.includes("strong")
+        UPSTOX_ACCESS_TOKEN ===
+
+        "YOUR_UPSTOX_ACCESS_TOKEN"
 
     ) {
 
-        stocks = stocks.filter(
-
-            stock => stock.signal.includes("BUY")
-
-        );
-
-    }
-
-    else if (filter.includes("sell")) {
-
-        stocks = stocks.filter(
-
-            stock => stock.signal.includes("SELL")
-
-        );
-
-    }
-
-    renderOpportunityTable(stocks);
-
-}
-
-
-// =========================================================
-// NAVIGATION
-// =========================================================
-
-function setupNavigation() {
-
-    const navItems =
-
-        queryAll(".nav-item");
-
-    navItems.forEach(item => {
-
-        item.addEventListener(
-
-            "click",
-
-            () => {
-
-                navItems.forEach(
-
-                    nav => nav.classList.remove("active")
-
-                );
-
-                item.classList.add("active");
-
-            }
-
-        );
-
-    });
-
-}
-
-
-// =========================================================
-// REFRESH
-// =========================================================
-
-function setupRefreshButton() {
-
-    const button = query(
-
-        ".refresh-button"
-
-    );
-
-    if (!button) return;
-
-    button.addEventListener(
-
-        "click",
-
-        async () => {
-
-            showLoading(
-
-                "Refreshing market data..."
-
-            );
-
-            await wait(1000);
-
-            updateLastUpdated();
-
-            hideLoading();
-
-            showToast(
-
-                "Market data refreshed",
-
-                "success"
-
-            );
-
-        }
-
-    );
-
-}
-
-
-function updateLastUpdated() {
-
-    appState.lastUpdated =
-
-        new Date();
-
-    const element = query(
-
-        ".last-updated"
-
-    );
-
-    if (element) {
-
-        element.textContent =
-
-            `Updated ${
-
-                appState.lastUpdated
-
-                    .toLocaleTimeString(
-
-                        "en-IN",
-
-                        {
-
-                            hour: "2-digit",
-
-                            minute: "2-digit"
-
-                        }
-
-                    )
-
-            }`;
-
-    }
-
-}
-
-
-// =========================================================
-// MARKET STATUS
-// =========================================================
-
-function updateMarketStatus() {
-
-    const now = new Date();
-
-    const hours = now.getHours();
-
-    const minutes = now.getMinutes();
-
-    const currentTime =
-
-        hours * 60 + minutes;
-
-    const marketOpen =
-
-        9 * 60 + 15;
-
-    const marketClose =
-
-        15 * 60 + 30;
-
-    const isOpen =
-
-        currentTime >= marketOpen &&
-
-        currentTime <= marketClose;
-
-    const status = query(
-
-        ".market-status-card strong"
-
-    );
-
-    if (status) {
-
-        status.textContent =
-
-            isOpen
-
-                ? "Market Open"
-
-                : "Market Closed";
-
-    }
-
-}
-
-
-// =========================================================
-// MOBILE MENU
-// =========================================================
-
-function setupMobileMenu() {
-
-    const menuButton = query(
-
-        ".mobile-menu-button"
-
-    );
-
-    const sidebar = query(
-
-        ".sidebar"
-
-    );
-
-    if (!menuButton || !sidebar) return;
-
-    menuButton.addEventListener(
-
-        "click",
-
-        () => {
-
-            sidebar.classList.toggle(
-
-                "open"
-
-            );
-
-        }
-
-    );
-
-}
-
-
-// =========================================================
-// UPSTOX API
-// =========================================================
-
-async function getUpstoxQuote(
-
-    instrumentKeys
-
-) {
-
-    if (!UPSTOX_ACCESS_TOKEN) {
-
-        console.warn(
+        throw new Error(
 
             "Upstox access token is missing."
 
         );
 
-        return null;
-
     }
 
-    const encodedKeys =
-
-        encodeURIComponent(
-
-            instrumentKeys.join(",")
-
-        );
 
     const response = await fetch(
 
-        `${UPSTOX_API_BASE}/market-quote/ltp?instrument_key=${encodedKeys}`,
+        `${UPSTOX_API_BASE}${endpoint}`,
 
         {
 
@@ -1858,34 +169,61 @@ async function getUpstoxQuote(
 
     );
 
+
+    let data = null;
+
+
+    try {
+
+        data = await response.json();
+
+    }
+
+    catch {
+
+        data = null;
+
+    }
+
+
     if (!response.ok) {
 
         throw new Error(
 
-            `Upstox API error: ${response.status}`
+            data?.errors?.[0]?.message ||
+
+            `API Error: ${response.status}`
 
         );
 
     }
 
-    return response.json();
+
+    return data;
 
 }
 
 
-// =========================================================
-// LOAD REAL-TIME QUOTES
-// =========================================================
+/* =========================================================
+   SEARCH SETUP
+========================================================= */
 
-async function loadRealTimeQuotes() {
+function setupSearch() {
 
-    if (!UPSTOX_ACCESS_TOKEN) {
+    const searchInput =
 
-        showToast(
+        query(
 
-            "Add a valid Upstox access token first",
+            "#stockSearch, .search-box input"
 
-            "warning"
+        );
+
+
+    if (!searchInput) {
+
+        console.warn(
+
+            "Search input not found."
 
         );
 
@@ -1893,27 +231,665 @@ async function loadRealTimeQuotes() {
 
     }
 
-    const keys = Object.values(STOCKS)
 
-        .map(stock => stock.instrumentKey);
+    searchInput.addEventListener(
+
+        "input",
+
+        () => {
+
+            const searchText =
+
+                searchInput.value.trim();
+
+
+            clearTimeout(
+
+                appState.searchTimeout
+
+            );
+
+
+            if (
+
+                searchText.length < 2
+
+            ) {
+
+                hideSuggestions();
+
+                return;
+
+            }
+
+
+            appState.searchTimeout =
+
+                setTimeout(
+
+                    () => {
+
+                        searchStocks(
+
+                            searchText
+
+                        );
+
+                    },
+
+                    400
+
+                );
+
+        }
+
+    );
+
+
+    searchInput.addEventListener(
+
+        "keydown",
+
+        event => {
+
+            if (
+
+                event.key === "Enter"
+
+            ) {
+
+                const firstSuggestion =
+
+                    query(
+
+                        ".stock-suggestion"
+
+                    );
+
+
+                if (
+
+                    firstSuggestion
+
+                ) {
+
+                    firstSuggestion.click();
+
+                }
+
+            }
+
+        }
+
+    );
+
+}
+
+
+/* =========================================================
+   SEARCH REAL STOCKS
+========================================================= */
+
+async function searchStocks(
+
+    searchText
+
+) {
 
     try {
 
+        showSearchLoading();
+
+
+        const encodedSearch =
+
+            encodeURIComponent(
+
+                searchText
+
+            );
+
+
         const response =
 
-            await getUpstoxQuote(keys);
+            await upstoxRequest(
 
-        console.log(
+                `/search/instrument?query=${
 
-            "Upstox live data:",
+                    encodedSearch
 
-            response
+                }`
+
+            );
+
+
+        const instruments =
+
+            extractSearchResults(
+
+                response
+
+            );
+
+
+        renderSuggestions(
+
+            instruments
 
         );
 
+    }
+
+    catch (error) {
+
+        console.error(
+
+            "Search error:",
+
+            error
+
+        );
+
+
+        renderNoSuggestions(
+
+            error.message
+
+        );
+
+    }
+
+}
+
+
+/* =========================================================
+   EXTRACT SEARCH RESULTS
+========================================================= */
+
+function extractSearchResults(
+
+    response
+
+) {
+
+    if (
+
+        !response ||
+
+        !response.data
+
+    ) {
+
+        return [];
+
+    }
+
+
+    const data =
+
+        Array.isArray(
+
+            response.data
+
+        )
+
+            ? response.data
+
+            : [];
+
+
+    return data
+
+        .filter(
+
+            item => {
+
+                return (
+
+                    item.instrument_key &&
+
+                    (
+
+                        item.exchange ===
+
+                        "NSE" ||
+
+                        item.exchange ===
+
+                        "BSE"
+
+                    )
+
+                );
+
+            }
+
+        )
+
+        .slice(
+
+            0,
+
+            10
+
+        );
+
+}
+
+
+/* =========================================================
+   RENDER SEARCH SUGGESTIONS
+========================================================= */
+
+function renderSuggestions(
+
+    instruments
+
+) {
+
+    let container =
+
+        query(
+
+            ".stock-suggestions"
+
+        );
+
+
+    if (!container) {
+
+        const searchBox =
+
+            query(
+
+                ".search-box"
+
+            );
+
+
+        if (!searchBox) return;
+
+
+        container =
+
+            document.createElement(
+
+                "div"
+
+            );
+
+
+        container.className =
+
+            "stock-suggestions";
+
+
+        searchBox.appendChild(
+
+            container
+
+        );
+
+    }
+
+
+    container.innerHTML = "";
+
+
+    if (
+
+        !instruments.length
+
+    ) {
+
+        container.innerHTML = `
+
+            <div class="no-suggestion">
+
+                No matching stock found
+
+            </div>
+
+        `;
+
+
+        container.classList.add(
+
+            "visible"
+
+        );
+
+
+        return;
+
+    }
+
+
+    instruments.forEach(
+
+        instrument => {
+
+            const item =
+
+                document.createElement(
+
+                    "div"
+
+                );
+
+
+            item.className =
+
+                "stock-suggestion";
+
+
+            item.innerHTML = `
+
+                <div>
+
+                    <strong>
+
+                        ${
+
+                            escapeHTML(
+
+                                instrument.trading_symbol ||
+
+                                instrument.short_name ||
+
+                                "Unknown"
+
+                            )
+
+                        }
+
+                    </strong>
+
+
+                    <span>
+
+                        ${
+
+                            escapeHTML(
+
+                                instrument.name ||
+
+                                "Unknown Company"
+
+                            )
+
+                        }
+
+                    </span>
+
+                </div>
+
+
+                <small>
+
+                    ${
+
+                        escapeHTML(
+
+                            instrument.exchange ||
+
+                            ""
+
+                        )
+
+                    }
+
+                </small>
+
+            `;
+
+
+            item.addEventListener(
+
+                "click",
+
+                () => {
+
+                    selectStock(
+
+                        instrument
+
+                    );
+
+                }
+
+            );
+
+
+            container.appendChild(
+
+                item
+
+            );
+
+        }
+
+    );
+
+
+    container.classList.add(
+
+        "visible"
+
+    );
+
+}
+
+
+/* =========================================================
+   SELECT REAL STOCK
+========================================================= */
+
+async function selectStock(
+
+    instrument
+
+) {
+
+    appState.selectedInstrument =
+
+        instrument;
+
+
+    hideSuggestions();
+
+
+    const searchInput =
+
+        query(
+
+            "#stockSearch, .search-box input"
+
+        );
+
+
+    if (
+
+        searchInput
+
+    ) {
+
+        searchInput.value =
+
+            instrument.trading_symbol ||
+
+            instrument.short_name ||
+
+            "";
+
+    }
+
+
+    await analyzeSelectedStock();
+
+}
+
+
+/* =========================================================
+   ANALYZE SELECTED STOCK
+========================================================= */
+
+async function analyzeSelectedStock() {
+
+    const instrument =
+
+        appState.selectedInstrument;
+
+
+    if (
+
+        !instrument ||
+
+        !instrument.instrument_key
+
+    ) {
+
         showToast(
 
-            "Live market data received",
+            "Please select a valid stock from search suggestions.",
+
+            "warning"
+
+        );
+
+
+        return;
+
+    }
+
+
+    try {
+
+        showLoading(
+
+            `Analyzing ${
+
+                instrument.trading_symbol ||
+
+                instrument.name
+
+            }...`
+
+        );
+
+
+        clearAnalysis();
+
+
+        const quote =
+
+            await getLiveQuote(
+
+                instrument.instrument_key
+
+            );
+
+
+        if (
+
+            !quote
+
+        ) {
+
+            throw new Error(
+
+                "Live quote unavailable."
+
+            );
+
+        }
+
+
+        const candles =
+
+            await getHistoricalCandles(
+
+                instrument.instrument_key
+
+            );
+
+
+        if (
+
+            !candles ||
+
+            candles.length < 50
+
+        ) {
+
+            throw new Error(
+
+                "Not enough historical data to calculate indicators."
+
+            );
+
+        }
+
+
+        const indicators =
+
+            calculateAllIndicators(
+
+                candles
+
+            );
+
+
+        const analysis =
+
+            calculateTechnicalAnalysis(
+
+                quote,
+
+                indicators
+
+            );
+
+
+        appState.selectedQuote =
+
+            quote;
+
+
+        appState.candles =
+
+            candles;
+
+
+        appState.indicators =
+
+            indicators;
+
+
+        appState.analysis =
+
+            analysis;
+
+
+        renderRealAnalysis(
+
+            instrument,
+
+            quote,
+
+            indicators,
+
+            analysis
+
+        );
+
+
+        updateLastUpdated();
+
+
+        showToast(
+
+            "Real stock analysis completed.",
 
             "success"
 
@@ -1923,13 +899,2833 @@ async function loadRealTimeQuotes() {
 
     catch (error) {
 
-        console.error(error);
+        console.error(
+
+            "Analysis error:",
+
+            error
+
+        );
+
+
+        hideAnalysis();
+
 
         showToast(
 
-            "Unable to fetch live market data",
+            error.message ||
+
+            "Unable to analyze this stock.",
 
             "error"
+
+        );
+
+    }
+
+    finally {
+
+        hideLoading();
+
+    }
+
+}
+
+
+/* =========================================================
+   LIVE QUOTE
+========================================================= */
+
+async function getLiveQuote(
+
+    instrumentKey
+
+) {
+
+    const encodedKey =
+
+        encodeURIComponent(
+
+            instrumentKey
+
+        );
+
+
+    const response =
+
+        await upstoxRequest(
+
+            `/market-quote/ltp?instrument_key=${
+
+                encodedKey
+
+            }`
+
+        );
+
+
+    if (
+
+        !response ||
+
+        !response.data
+
+    ) {
+
+        throw new Error(
+
+            "No live price data received."
+
+        );
+
+    }
+
+
+    const quoteData =
+
+        Object.values(
+
+            response.data
+
+        )[0];
+
+
+    if (
+
+        !quoteData ||
+
+        !quoteData.last_price
+
+    ) {
+
+        throw new Error(
+
+            "Invalid live price received."
+
+        );
+
+    }
+
+
+    return {
+
+        price:
+
+            Number(
+
+                quoteData.last_price
+
+            ),
+
+        change:
+
+            Number(
+
+                quoteData.net_change ||
+
+                0
+
+            ),
+
+        percentChange:
+
+            Number(
+
+                quoteData.percent_change ||
+
+                0
+
+            )
+
+    };
+
+}
+
+
+/* =========================================================
+   HISTORICAL CANDLES
+========================================================= */
+
+async function getHistoricalCandles(
+
+    instrumentKey
+
+) {
+
+    const today =
+
+        new Date();
+
+
+    const toDate =
+
+        formatDate(
+
+            today
+
+        );
+
+
+    const fromDate =
+
+        new Date(
+
+            today
+
+        );
+
+
+    fromDate.setDate(
+
+        fromDate.getDate() - 365
+
+    );
+
+
+    const fromDateString =
+
+        formatDate(
+
+            fromDate
+
+        );
+
+
+    const encodedKey =
+
+        encodeURIComponent(
+
+            instrumentKey
+
+        );
+
+
+    const response =
+
+        await upstoxRequest(
+
+            `/historical-candle/${
+
+                encodedKey
+
+            }/day/1/${
+
+                toDate
+
+            }/${
+
+                fromDateString
+
+            }`
+
+        );
+
+
+    const candles =
+
+        response?.data?.candles;
+
+
+    if (
+
+        !Array.isArray(
+
+            candles
+
+        )
+
+    ) {
+
+        throw new Error(
+
+            "Historical candle data unavailable."
+
+        );
+
+    }
+
+
+    return candles
+
+        .map(
+
+            candle => ({
+
+                timestamp:
+
+                    candle[0],
+
+                open:
+
+                    Number(
+
+                        candle[1]
+
+                    ),
+
+                high:
+
+                    Number(
+
+                        candle[2]
+
+                    ),
+
+                low:
+
+                    Number(
+
+                        candle[3]
+
+                    ),
+
+                close:
+
+                    Number(
+
+                        candle[4]
+
+                    ),
+
+                volume:
+
+                    Number(
+
+                        candle[5]
+
+                    )
+
+            })
+
+        )
+
+        .reverse();
+
+}
+
+
+/* =========================================================
+   INDICATOR CALCULATIONS
+========================================================= */
+
+function calculateAllIndicators(
+
+    candles
+
+) {
+
+    const closes =
+
+        candles.map(
+
+            candle => candle.close
+
+        );
+
+
+    const highs =
+
+        candles.map(
+
+            candle => candle.high
+
+        );
+
+
+    const lows =
+
+        candles.map(
+
+            candle => candle.low
+
+        );
+
+
+    const volumes =
+
+        candles.map(
+
+            candle => candle.volume
+
+        );
+
+
+    const ema20 =
+
+        calculateEMA(
+
+            closes,
+
+            20
+
+        );
+
+
+    const ema50 =
+
+        calculateEMA(
+
+            closes,
+
+            50
+
+        );
+
+
+    const sma200 =
+
+        calculateSMA(
+
+            closes,
+
+            200
+
+        );
+
+
+    const rsi =
+
+        calculateRSI(
+
+            closes,
+
+            14
+
+        );
+
+
+    const macd =
+
+        calculateMACD(
+
+            closes
+
+        );
+
+
+    const bollinger =
+
+        calculateBollingerBands(
+
+            closes,
+
+            20,
+
+            2
+
+        );
+
+
+    const atr =
+
+        calculateATR(
+
+            candles,
+
+            14
+
+        );
+
+
+    const adx =
+
+        calculateADX(
+
+            candles,
+
+            14
+
+        );
+
+
+    const averageVolume =
+
+        calculateSMA(
+
+            volumes,
+
+            20
+
+        );
+
+
+    const currentVolume =
+
+        volumes[
+
+            volumes.length - 1
+
+        ];
+
+
+    return {
+
+        rsi,
+
+        ema20,
+
+        ema50,
+
+        sma200,
+
+        macd,
+
+        bollinger,
+
+        atr,
+
+        adx,
+
+        averageVolume,
+
+        currentVolume
+
+    };
+
+}
+
+
+/* =========================================================
+   SMA
+========================================================= */
+
+function calculateSMA(
+
+    values,
+
+    period
+
+) {
+
+    if (
+
+        values.length < period
+
+    ) {
+
+        return null;
+
+    }
+
+
+    const recent =
+
+        values.slice(
+
+            -period
+
+        );
+
+
+    return (
+
+        recent.reduce(
+
+            (
+
+                total,
+
+                value
+
+            ) => total + value,
+
+            0
+
+        ) / period
+
+    );
+
+}
+
+
+/* =========================================================
+   EMA
+========================================================= */
+
+function calculateEMA(
+
+    values,
+
+    period
+
+) {
+
+    if (
+
+        values.length < period
+
+    ) {
+
+        return null;
+
+    }
+
+
+    const multiplier =
+
+        2 /
+
+        (
+
+            period + 1
+
+        );
+
+
+    let ema =
+
+        calculateSMA(
+
+            values.slice(
+
+                0,
+
+                period
+
+            ),
+
+            period
+
+        );
+
+
+    for (
+
+        let i = period;
+
+        i < values.length;
+
+        i++
+
+    ) {
+
+        ema =
+
+            (
+
+                values[i] -
+
+                ema
+
+            ) *
+
+            multiplier +
+
+            ema;
+
+    }
+
+
+    return ema;
+
+}
+
+
+/* =========================================================
+   RSI
+========================================================= */
+
+function calculateRSI(
+
+    values,
+
+    period = 14
+
+) {
+
+    if (
+
+        values.length <= period
+
+    ) {
+
+        return null;
+
+    }
+
+
+    let gains = 0;
+
+    let losses = 0;
+
+
+    for (
+
+        let i = 1;
+
+        i <= period;
+
+        i++
+
+    ) {
+
+        const change =
+
+            values[i] -
+
+            values[i - 1];
+
+
+        if (
+
+            change >= 0
+
+        ) {
+
+            gains += change;
+
+        }
+
+        else {
+
+            losses +=
+
+                Math.abs(
+
+                    change
+
+                );
+
+        }
+
+    }
+
+
+    let averageGain =
+
+        gains / period;
+
+
+    let averageLoss =
+
+        losses / period;
+
+
+    for (
+
+        let i = period + 1;
+
+        i < values.length;
+
+        i++
+
+    ) {
+
+        const change =
+
+            values[i] -
+
+            values[i - 1];
+
+
+        const gain =
+
+            change > 0
+
+                ? change
+
+                : 0;
+
+
+        const loss =
+
+            change < 0
+
+                ? Math.abs(
+
+                    change
+
+                )
+
+                : 0;
+
+
+        averageGain =
+
+            (
+
+                averageGain *
+
+                (
+
+                    period - 1
+
+                ) +
+
+                gain
+
+            ) / period;
+
+
+        averageLoss =
+
+            (
+
+                averageLoss *
+
+                (
+
+                    period - 1
+
+                ) +
+
+                loss
+
+            ) / period;
+
+    }
+
+
+    if (
+
+        averageLoss === 0
+
+    ) {
+
+        return 100;
+
+    }
+
+
+    const relativeStrength =
+
+        averageGain /
+
+        averageLoss;
+
+
+    return (
+
+        100 -
+
+        (
+
+            100 /
+
+            (
+
+                1 +
+
+                relativeStrength
+
+            )
+
+        )
+
+    );
+
+}
+
+
+/* =========================================================
+   MACD
+========================================================= */
+
+function calculateMACD(
+
+    values
+
+) {
+
+    const ema12 =
+
+        calculateEMA(
+
+            values,
+
+            12
+
+        );
+
+
+    const ema26 =
+
+        calculateEMA(
+
+            values,
+
+            26
+
+        );
+
+
+    if (
+
+        ema12 === null ||
+
+        ema26 === null
+
+    ) {
+
+        return {
+
+            value: null,
+
+            signal: "NEUTRAL"
+
+        };
+
+    }
+
+
+    const value =
+
+        ema12 -
+
+        ema26;
+
+
+    return {
+
+        value,
+
+        signal:
+
+            value > 0
+
+                ? "BULLISH"
+
+                : "BEARISH"
+
+    };
+
+}
+
+
+/* =========================================================
+   BOLLINGER BANDS
+========================================================= */
+
+function calculateBollingerBands(
+
+    values,
+
+    period = 20,
+
+    standardDeviations = 2
+
+) {
+
+    const sma =
+
+        calculateSMA(
+
+            values,
+
+            period
+
+        );
+
+
+    if (
+
+        sma === null
+
+    ) {
+
+        return null;
+
+    }
+
+
+    const recent =
+
+        values.slice(
+
+            -period
+
+        );
+
+
+    const variance =
+
+        recent.reduce(
+
+            (
+
+                total,
+
+                value
+
+            ) => {
+
+                return total +
+
+                    Math.pow(
+
+                        value -
+
+                        sma,
+
+                        2
+
+                    );
+
+            },
+
+            0
+
+        ) / period;
+
+
+    const standardDeviation =
+
+        Math.sqrt(
+
+            variance
+
+        );
+
+
+    return {
+
+        middle: sma,
+
+        upper:
+
+            sma +
+
+            (
+
+                standardDeviation *
+
+                standardDeviations
+
+            ),
+
+        lower:
+
+            sma -
+
+            (
+
+                standardDeviation *
+
+                standardDeviations
+
+            )
+
+    };
+
+}
+
+
+/* =========================================================
+   ATR
+========================================================= */
+
+function calculateATR(
+
+    candles,
+
+    period = 14
+
+) {
+
+    if (
+
+        candles.length <
+
+        period + 1
+
+    ) {
+
+        return null;
+
+    }
+
+
+    const trueRanges = [];
+
+
+    for (
+
+        let i = 1;
+
+        i < candles.length;
+
+        i++
+
+    ) {
+
+        const current =
+
+            candles[i];
+
+
+        const previous =
+
+            candles[i - 1];
+
+
+        const trueRange =
+
+            Math.max(
+
+                current.high -
+
+                current.low,
+
+
+                Math.abs(
+
+                    current.high -
+
+                    previous.close
+
+                ),
+
+
+                Math.abs(
+
+                    current.low -
+
+                    previous.close
+
+                )
+
+            );
+
+
+        trueRanges.push(
+
+            trueRange
+
+        );
+
+    }
+
+
+    return calculateSMA(
+
+        trueRanges,
+
+        period
+
+    );
+
+}
+
+
+/* =========================================================
+   ADX - TREND STRENGTH APPROXIMATION
+========================================================= */
+
+function calculateADX(
+
+    candles,
+
+    period = 14
+
+) {
+
+    if (
+
+        candles.length <
+
+        period + 1
+
+    ) {
+
+        return null;
+
+    }
+
+
+    const directionalMovements = [];
+
+
+    for (
+
+        let i = 1;
+
+        i < candles.length;
+
+        i++
+
+    ) {
+
+        const current =
+
+            candles[i];
+
+
+        const previous =
+
+            candles[i - 1];
+
+
+        const upMove =
+
+            current.high -
+
+            previous.high;
+
+
+        const downMove =
+
+            previous.low -
+
+            current.low;
+
+
+        let movement = 0;
+
+
+        if (
+
+            upMove > downMove &&
+
+            upMove > 0
+
+        ) {
+
+            movement =
+
+                upMove;
+
+        }
+
+        else if (
+
+            downMove > upMove &&
+
+            downMove > 0
+
+        ) {
+
+            movement =
+
+                -downMove;
+
+        }
+
+
+        directionalMovements.push(
+
+            movement
+
+        );
+
+    }
+
+
+    const absoluteMovements =
+
+        directionalMovements.map(
+
+            value =>
+
+                Math.abs(
+
+                    value
+
+                )
+
+        );
+
+
+    const averageMovement =
+
+        calculateSMA(
+
+            absoluteMovements,
+
+            period
+
+        );
+
+
+    if (
+
+        !averageMovement
+
+    ) {
+
+        return null;
+
+    }
+
+
+    const recentMovement =
+
+        Math.abs(
+
+            directionalMovements[
+
+                directionalMovements.length - 1
+
+            ]
+
+        );
+
+
+    const adx =
+
+        (
+
+            recentMovement /
+
+            averageMovement
+
+        ) *
+
+        25;
+
+
+    return Math.min(
+
+        100,
+
+        adx
+
+    );
+
+}
+
+
+/* =========================================================
+   TECHNICAL SCORING
+========================================================= */
+
+function calculateTechnicalAnalysis(
+
+    quote,
+
+    indicators
+
+) {
+
+    const price =
+
+        quote.price;
+
+
+    let score = 0;
+
+    let buySignals = 0;
+
+    let sellSignals = 0;
+
+    let totalSignals = 0;
+
+
+    const signals = {};
+
+
+    /* RSI */
+
+    if (
+
+        indicators.rsi !== null
+
+    ) {
+
+        totalSignals++;
+
+
+        if (
+
+            indicators.rsi >= 50 &&
+
+            indicators.rsi <= 68
+
+        ) {
+
+            score += 15;
+
+            buySignals++;
+
+            signals.rsi = "BUY";
+
+        }
+
+        else if (
+
+            indicators.rsi < 30
+
+        ) {
+
+            score += 15;
+
+            buySignals++;
+
+            signals.rsi = "BUY";
+
+        }
+
+        else if (
+
+            indicators.rsi > 70
+
+        ) {
+
+            score -= 15;
+
+            sellSignals++;
+
+            signals.rsi = "SELL";
+
+        }
+
+        else {
+
+            score += 7;
+
+            signals.rsi = "NEUTRAL";
+
+        }
+
+    }
+
+
+    /* MACD */
+
+    totalSignals++;
+
+
+    if (
+
+        indicators.macd.signal ===
+
+        "BULLISH"
+
+    ) {
+
+        score += 15;
+
+        buySignals++;
+
+        signals.macd = "BUY";
+
+    }
+
+    else {
+
+        score -= 15;
+
+        sellSignals++;
+
+        signals.macd = "SELL";
+
+    }
+
+
+    /* EMA 20 / 50 */
+
+    if (
+
+        indicators.ema20 !== null &&
+
+        indicators.ema50 !== null
+
+    ) {
+
+        totalSignals++;
+
+
+        if (
+
+            indicators.ema20 >
+
+            indicators.ema50
+
+        ) {
+
+            score += 15;
+
+            buySignals++;
+
+            signals.ema = "BUY";
+
+        }
+
+        else {
+
+            score -= 15;
+
+            sellSignals++;
+
+            signals.ema = "SELL";
+
+        }
+
+    }
+
+
+    /* SMA 200 */
+
+    if (
+
+        indicators.sma200 !== null
+
+    ) {
+
+        totalSignals++;
+
+
+        if (
+
+            price >
+
+            indicators.sma200
+
+        ) {
+
+            score += 10;
+
+            buySignals++;
+
+            signals.sma = "BUY";
+
+        }
+
+        else {
+
+            score -= 10;
+
+            sellSignals++;
+
+            signals.sma = "SELL";
+
+        }
+
+    }
+
+
+    /* Bollinger Bands */
+
+    if (
+
+        indicators.bollinger
+
+    ) {
+
+        totalSignals++;
+
+
+        if (
+
+            price >
+
+            indicators.bollinger.middle
+
+        ) {
+
+            score += 10;
+
+            buySignals++;
+
+            signals.bollinger = "BUY";
+
+        }
+
+        else {
+
+            score += 5;
+
+            signals.bollinger = "NEUTRAL";
+
+        }
+
+    }
+
+
+    /* ADX */
+
+    if (
+
+        indicators.adx !== null
+
+    ) {
+
+        totalSignals++;
+
+
+        if (
+
+            indicators.adx >= 25
+
+        ) {
+
+            score += 10;
+
+            buySignals++;
+
+            signals.adx = "BUY";
+
+        }
+
+        else {
+
+            score += 5;
+
+            signals.adx = "NEUTRAL";
+
+        }
+
+    }
+
+
+    /* Volume */
+
+    if (
+
+        indicators.averageVolume &&
+
+        indicators.currentVolume
+
+    ) {
+
+        totalSignals++;
+
+
+        const volumeRatio =
+
+            indicators.currentVolume /
+
+            indicators.averageVolume;
+
+
+        if (
+
+            volumeRatio >= 1.2
+
+        ) {
+
+            score += 10;
+
+            buySignals++;
+
+            signals.volume = "BUY";
+
+        }
+
+        else {
+
+            score += 5;
+
+            signals.volume = "NEUTRAL";
+
+        }
+
+    }
+
+
+    const maxPossibleScore =
+
+        85;
+
+
+    const normalizedScore =
+
+        Math.max(
+
+            0,
+
+            Math.min(
+
+                100,
+
+                Math.round(
+
+                    (
+
+                        score /
+
+                        maxPossibleScore
+
+                    ) *
+
+                    100
+
+                )
+
+            )
+
+        );
+
+
+    let signal =
+
+        "NEUTRAL";
+
+
+    if (
+
+        normalizedScore >= 75
+
+    ) {
+
+        signal =
+
+            "STRONG BUY";
+
+    }
+
+    else if (
+
+        normalizedScore >= 60
+
+    ) {
+
+        signal =
+
+            "BUY";
+
+    }
+
+    else if (
+
+        normalizedScore <= 25
+
+    ) {
+
+        signal =
+
+            "STRONG SELL";
+
+    }
+
+    else if (
+
+        normalizedScore <= 40
+
+    ) {
+
+        signal =
+
+            "SELL";
+
+    }
+
+
+    const tradeLevels =
+
+        calculateTradeLevels(
+
+            price,
+
+            indicators,
+
+            signal
+
+        );
+
+
+    return {
+
+        score:
+
+            normalizedScore,
+
+        signal,
+
+        buySignals,
+
+        sellSignals,
+
+        totalSignals,
+
+        signals,
+
+        tradeLevels
+
+    };
+
+}
+
+
+/* =========================================================
+   TRADE LEVELS
+========================================================= */
+
+function calculateTradeLevels(
+
+    price,
+
+    indicators,
+
+    signal
+
+) {
+
+    const atr =
+
+        indicators.atr;
+
+
+    if (
+
+        !atr
+
+    ) {
+
+        return {
+
+            entry: price,
+
+            target: null,
+
+            stopLoss: null,
+
+            exit: null
+
+        };
+
+    }
+
+
+    let entry = price;
+
+
+    let stopLoss;
+
+
+    let target;
+
+
+    if (
+
+        signal.includes(
+
+            "BUY"
+
+        )
+
+    ) {
+
+        stopLoss =
+
+            price -
+
+            (
+
+                atr *
+
+                1.5
+
+            );
+
+
+        target =
+
+            price +
+
+            (
+
+                atr *
+
+                2
+
+            );
+
+    }
+
+    else if (
+
+        signal.includes(
+
+            "SELL"
+
+        )
+
+    ) {
+
+        stopLoss =
+
+            price +
+
+            (
+
+                atr *
+
+                1.5
+
+            );
+
+
+        target =
+
+            price -
+
+            (
+
+                atr *
+
+                2
+
+            );
+
+    }
+
+    else {
+
+        stopLoss =
+
+            price -
+
+            atr;
+
+
+        target =
+
+            price +
+
+            atr;
+
+    }
+
+
+    return {
+
+        entry,
+
+        target,
+
+        stopLoss,
+
+        exit: target
+
+    };
+
+}
+
+
+/* =========================================================
+   RENDER REAL ANALYSIS
+========================================================= */
+
+function renderRealAnalysis(
+
+    instrument,
+
+    quote,
+
+    indicators,
+
+    analysis
+
+) {
+
+    const section =
+
+        query(
+
+            ".stock-analysis-section"
+
+        );
+
+
+    if (
+
+        !section
+
+    ) {
+
+        console.warn(
+
+            "Analysis section not found."
+
+        );
+
+        return;
+
+    }
+
+
+    section.classList.remove(
+
+        "hidden"
+
+    );
+
+
+    const symbol =
+
+        instrument.trading_symbol ||
+
+        instrument.short_name ||
+
+        instrument.name;
+
+
+    setText(
+
+        section,
+
+        ".analysis-symbol",
+
+        symbol
+
+    );
+
+
+    setText(
+
+        section,
+
+        ".analysis-price",
+
+        formatPrice(
+
+            quote.price
+
+        )
+
+    );
+
+
+    setText(
+
+        section,
+
+        ".analysis-price-change",
+
+        `${
+
+            quote.percentChange >= 0
+
+                ? "+"
+
+                : ""
+
+        }${
+
+            quote.percentChange.toFixed(
+
+                2
+
+            )
+
+        }%`
+
+    );
+
+
+    setText(
+
+        section,
+
+        ".large-signal-badge",
+
+        analysis.signal
+
+    );
+
+
+    setText(
+
+        section,
+
+        ".technical-score strong",
+
+        `${
+
+            analysis.score
+
+        }/100`
+
+    );
+
+
+    renderTradeLevels(
+
+        section,
+
+        analysis.tradeLevels
+
+    );
+
+
+    renderIndicators(
+
+        section,
+
+        indicators,
+
+        analysis
+
+    );
+
+
+    renderAdditionalMetrics(
+
+        section,
+
+        indicators
+
+    );
+
+}
+
+
+/* =========================================================
+   RENDER TRADE LEVELS
+========================================================= */
+
+function renderTradeLevels(
+
+    section,
+
+    levels
+
+) {
+
+    const cards =
+
+        section.querySelectorAll(
+
+            ".trade-level-card strong"
+
+        );
+
+
+    if (
+
+        cards.length >= 4
+
+    ) {
+
+        cards[0].textContent =
+
+            formatPrice(
+
+                levels.entry
+
+            );
+
+
+        cards[1].textContent =
+
+            levels.target
+
+                ? formatPrice(
+
+                    levels.target
+
+                )
+
+                : "--";
+
+
+        cards[2].textContent =
+
+            levels.stopLoss
+
+                ? formatPrice(
+
+                    levels.stopLoss
+
+                )
+
+                : "--";
+
+
+        cards[3].textContent =
+
+            levels.exit
+
+                ? formatPrice(
+
+                    levels.exit
+
+                )
+
+                : "--";
+
+    }
+
+}
+
+
+/* =========================================================
+   RENDER INDICATORS
+========================================================= */
+
+function renderIndicators(
+
+    section,
+
+    indicators,
+
+    analysis
+
+) {
+
+    const grid =
+
+        section.querySelector(
+
+            ".indicator-grid"
+
+        );
+
+
+    if (
+
+        !grid
+
+    ) return;
+
+
+    const indicatorData = [
+
+        {
+
+            name: "RSI",
+
+            signal:
+
+                analysis.signals.rsi ||
+
+                "N/A",
+
+            value:
+
+                indicators.rsi !== null
+
+                    ? indicators.rsi.toFixed(
+
+                        2
+
+                    )
+
+                    : "--"
+
+        },
+
+        {
+
+            name: "MACD",
+
+            signal:
+
+                analysis.signals.macd ||
+
+                "N/A",
+
+            value:
+
+                indicators.macd.signal
+
+        },
+
+        {
+
+            name: "EMA 20 / 50",
+
+            signal:
+
+                analysis.signals.ema ||
+
+                "N/A",
+
+            value:
+
+                indicators.ema20 &&
+
+                indicators.ema50
+
+                    ? `${
+
+                        indicators.ema20.toFixed(
+
+                            2
+
+                        )
+
+                    } / ${
+
+                        indicators.ema50.toFixed(
+
+                            2
+
+                        )
+
+                    }`
+
+                    : "--"
+
+        },
+
+        {
+
+            name: "SMA 200",
+
+            signal:
+
+                analysis.signals.sma ||
+
+                "N/A",
+
+            value:
+
+                indicators.sma200
+
+                    ? indicators.sma200.toFixed(
+
+                        2
+
+                    )
+
+                    : "--"
+
+        },
+
+        {
+
+            name: "Bollinger Bands",
+
+            signal:
+
+                analysis.signals.bollinger ||
+
+                "N/A",
+
+            value:
+
+                indicators.bollinger
+
+                    ? `Upper: ${
+
+                        indicators.bollinger.upper.toFixed(
+
+                            2
+
+                        )
+
+                    }`
+
+                    : "--"
+
+        },
+
+        {
+
+            name: "ADX",
+
+            signal:
+
+                analysis.signals.adx ||
+
+                "N/A",
+
+            value:
+
+                indicators.adx !== null
+
+                    ? indicators.adx.toFixed(
+
+                        2
+
+                    )
+
+                    : "--"
+
+        },
+
+        {
+
+            name: "Volume",
+
+            signal:
+
+                analysis.signals.volume ||
+
+                "N/A",
+
+            value:
+
+                indicators.averageVolume
+
+                    ? `${
+
+                        (
+
+                            indicators.currentVolume /
+
+                            indicators.averageVolume
+
+                        ).toFixed(
+
+                            2
+
+                        )
+
+                    }x average`
+
+                    : "--"
+
+        }
+
+    ];
+
+
+    grid.innerHTML = "";
+
+
+    indicatorData.forEach(
+
+        indicator => {
+
+            const card =
+
+                document.createElement(
+
+                    "div"
+
+                );
+
+
+            card.className =
+
+                "indicator-card";
+
+
+            const signalClass =
+
+                indicator.signal ===
+
+                "BUY"
+
+                    ? "positive"
+
+                    : indicator.signal ===
+
+                        "SELL"
+
+                        ? "negative"
+
+                        : "neutral";
+
+
+            card.innerHTML = `
+
+                <div class="indicator-name">
+
+                    ${
+
+                        indicator.name
+
+                    }
+
+                </div>
+
+
+                <div class="indicator-signal ${
+
+                    signalClass
+
+                }">
+
+                    ${
+
+                        indicator.signal
+
+                    }
+
+                </div>
+
+
+                <div class="indicator-value">
+
+                    ${
+
+                        indicator.value
+
+                    }
+
+                </div>
+
+            `;
+
+
+            grid.appendChild(
+
+                card
+
+            );
+
+        }
+
+    );
+
+}
+
+
+/* =========================================================
+   ADDITIONAL METRICS
+========================================================= */
+
+function renderAdditionalMetrics(
+
+    section,
+
+    indicators
+
+) {
+
+    const atr =
+
+        indicators.atr;
+
+
+    const adx =
+
+        indicators.adx;
+
+
+    const volumeRatio =
+
+        indicators.averageVolume
+
+            ? indicators.currentVolume /
+
+            indicators.averageVolume
+
+            : null;
+
+
+    setText(
+
+        section,
+
+        ".trend-strength",
+
+        adx !== null
+
+            ? adx.toFixed(
+
+                2
+
+            )
+
+            : "--"
+
+    );
+
+
+    setText(
+
+        section,
+
+        ".volume-strength",
+
+        volumeRatio !== null
+
+            ? `${
+
+                volumeRatio.toFixed(
+
+                    2
+
+                )
+
+            }x average`
+
+            : "--"
+
+    );
+
+
+    setText(
+
+        section,
+
+        ".atr-value",
+
+        atr !== null
+
+            ? formatPrice(
+
+                atr
+
+            )
+
+            : "--"
+
+    );
+
+}
+
+
+/* =========================================================
+   REFRESH
+========================================================= */
+
+function setupRefreshButton() {
+
+    const button =
+
+        query(
+
+            ".refresh-button"
+
+        );
+
+
+    if (
+
+        !button
+
+    ) return;
+
+
+    button.addEventListener(
+
+        "click",
+
+        () => {
+
+            if (
+
+                appState.selectedInstrument
+
+            ) {
+
+                analyzeSelectedStock();
+
+            }
+
+            else {
+
+                showToast(
+
+                    "Select a stock first.",
+
+                    "warning"
+
+                );
+
+            }
+
+        }
+
+    );
+
+}
+
+
+/* =========================================================
+   NAVIGATION
+========================================================= */
+
+function setupNavigation() {
+
+    queryAll(
+
+        ".nav-item"
+
+    ).forEach(
+
+        item => {
+
+            item.addEventListener(
+
+                "click",
+
+                () => {
+
+                    queryAll(
+
+                        ".nav-item"
+
+                    ).forEach(
+
+                        nav => {
+
+                            nav.classList.remove(
+
+                                "active"
+
+                            );
+
+                        }
+
+                    );
+
+
+                    item.classList.add(
+
+                        "active"
+
+                    );
+
+                }
+
+            );
+
+        }
+
+    );
+
+}
+
+
+/* =========================================================
+   MOBILE MENU
+========================================================= */
+
+function setupMobileMenu() {
+
+    const button =
+
+        query(
+
+            ".mobile-menu-button"
+
+        );
+
+
+    const sidebar =
+
+        query(
+
+            ".sidebar"
+
+        );
+
+
+    if (
+
+        !button ||
+
+        !sidebar
+
+    ) return;
+
+
+    button.addEventListener(
+
+        "click",
+
+        () => {
+
+            sidebar.classList.toggle(
+
+                "open"
+
+            );
+
+        }
+
+    );
+
+}
+
+
+/* =========================================================
+   MARKET STATUS
+========================================================= */
+
+function updateMarketStatus() {
+
+    const now =
+
+        new Date();
+
+
+    const day =
+
+        now.getDay();
+
+
+    const minutes =
+
+        now.getHours() *
+
+        60 +
+
+        now.getMinutes();
+
+
+    const marketOpen =
+
+        9 *
+
+        60 +
+
+        15;
+
+
+    const marketClose =
+
+        15 *
+
+        60 +
+
+        30;
+
+
+    const isWeekday =
+
+        day >= 1 &&
+
+        day <= 5;
+
+
+    const isOpen =
+
+        isWeekday &&
+
+        minutes >= marketOpen &&
+
+        minutes <= marketClose;
+
+
+    const status =
+
+        query(
+
+            ".market-status-card strong"
+
+        );
+
+
+    if (
+
+        status
+
+    ) {
+
+        status.textContent =
+
+            isOpen
+
+                ? "Market Open"
+
+                : "Market Closed";
+
+    }
+
+}
+
+
+/* =========================================================
+   HIDE ANALYSIS
+========================================================= */
+
+function hideAnalysis() {
+
+    const section =
+
+        query(
+
+            ".stock-analysis-section"
+
+        );
+
+
+    if (
+
+        section
+
+    ) {
+
+        section.classList.add(
+
+            "hidden"
 
         );
 
@@ -1938,155 +3734,390 @@ async function loadRealTimeQuotes() {
 }
 
 
-// =========================================================
-// TECHNICAL SCORING ENGINE
-// =========================================================
+function clearAnalysis() {
 
-function calculateTechnicalScore({
+    hideAnalysis();
 
-    rsi = 50,
+}
 
-    macd = "Neutral",
 
-    trend = "Neutral",
+/* =========================================================
+   SUGGESTION HELPERS
+========================================================= */
 
-    volume = "Normal",
+function hideSuggestions() {
 
-    priceAboveEMA = false,
+    const container =
 
-    priceAboveSMA = false
+        query(
 
-}) {
+            ".stock-suggestions"
 
-    let score = 50;
+        );
 
-    if (rsi >= 50 && rsi <= 68) {
 
-        score += 10;
+    if (
 
-    }
+        container
 
-    if (rsi < 30) {
+    ) {
 
-        score += 12;
+        container.classList.remove(
 
-    }
+            "visible"
 
-    if (rsi > 70) {
-
-        score -= 15;
+        );
 
     }
 
-    if (macd === "Bullish") {
+}
 
-        score += 15;
+
+function showSearchLoading() {
+
+    let container =
+
+        query(
+
+            ".stock-suggestions"
+
+        );
+
+
+    if (
+
+        !container
+
+    ) {
+
+        const searchBox =
+
+            query(
+
+                ".search-box"
+
+            );
+
+
+        if (
+
+            !searchBox
+
+        ) return;
+
+
+        container =
+
+            document.createElement(
+
+                "div"
+
+            );
+
+
+        container.className =
+
+            "stock-suggestions";
+
+
+        searchBox.appendChild(
+
+            container
+
+        );
 
     }
 
-    if (macd === "Bearish") {
 
-        score -= 15;
+    container.innerHTML = `
 
-    }
+        <div class="no-suggestion">
 
-    if (trend === "Bullish") {
+            Searching real stocks...
 
-        score += 12;
+        </div>
 
-    }
+    `;
 
-    if (trend === "Bearish") {
 
-        score -= 12;
+    container.classList.add(
 
-    }
-
-    if (volume === "High") {
-
-        score += 8;
-
-    }
-
-    if (priceAboveEMA) {
-
-        score += 5;
-
-    }
-
-    if (priceAboveSMA) {
-
-        score += 5;
-
-    }
-
-    score = Math.max(
-
-        0,
-
-        Math.min(
-
-            100,
-
-            score
-
-        )
+        "visible"
 
     );
 
-    return score;
+}
+
+
+function renderNoSuggestions(
+
+    message
+
+) {
+
+    const container =
+
+        query(
+
+            ".stock-suggestions"
+
+        );
+
+
+    if (
+
+        !container
+
+    ) return;
+
+
+    container.innerHTML = `
+
+        <div class="no-suggestion">
+
+            ${
+
+                escapeHTML(
+
+                    message ||
+
+                    "No stock found"
+
+                )
+
+            }
+
+        </div>
+
+    `;
+
+
+    container.classList.add(
+
+        "visible"
+
+    );
 
 }
 
 
-function getSignalFromScore(score) {
+/* =========================================================
+   UI HELPERS
+========================================================= */
 
-    if (score >= 80) {
+function setText(
 
-        return "STRONG BUY";
+    parent,
+
+    selector,
+
+    value
+
+) {
+
+    const element =
+
+        parent.querySelector(
+
+            selector
+
+        );
+
+
+    if (
+
+        element
+
+    ) {
+
+        element.textContent =
+
+            value;
 
     }
-
-    if (score >= 65) {
-
-        return "BUY";
-
-    }
-
-    if (score >= 45) {
-
-        return "NEUTRAL";
-
-    }
-
-    if (score >= 30) {
-
-        return "SELL";
-
-    }
-
-    return "STRONG SELL";
 
 }
 
 
-// =========================================================
-// LOADING
-// =========================================================
+function formatPrice(
 
-function showLoading(message) {
+    value
+
+) {
+
+    if (
+
+        value === null ||
+
+        value === undefined ||
+
+        isNaN(
+
+            value
+
+        )
+
+    ) {
+
+        return "--";
+
+    }
+
+
+    return `₹${
+
+        Number(
+
+            value
+
+        ).toLocaleString(
+
+            "en-IN",
+
+            {
+
+                minimumFractionDigits: 2,
+
+                maximumFractionDigits: 2
+
+            }
+
+        )
+
+    }`;
+
+}
+
+
+function formatDate(
+
+    date
+
+) {
+
+    const year =
+
+        date.getFullYear();
+
+
+    const month =
+
+        String(
+
+            date.getMonth() + 1
+
+        ).padStart(
+
+            2,
+
+            "0"
+
+        );
+
+
+    const day =
+
+        String(
+
+            date.getDate()
+
+        ).padStart(
+
+            2,
+
+            "0"
+
+        );
+
+
+    return `${
+
+        year
+
+    }-${
+
+        month
+
+    }-${
+
+        day
+
+    }`;
+
+}
+
+
+function updateLastUpdated() {
+
+    appState.lastUpdated =
+
+        new Date();
+
+
+    const element =
+
+        query(
+
+            ".last-updated"
+
+        );
+
+
+    if (
+
+        element
+
+    ) {
+
+        element.textContent =
+
+            `Last updated: ${
+
+                appState.lastUpdated.toLocaleTimeString(
+
+                    "en-IN"
+
+                )
+
+            }`;
+
+    }
+
+}
+
+
+/* =========================================================
+   LOADING
+========================================================= */
+
+function showLoading(
+
+    message
+
+) {
 
     const overlay =
 
-        query(".loading-overlay");
+        query(
 
-    if (!overlay) return;
+            ".loading-overlay"
+
+        );
+
+
+    if (
+
+        !overlay
+
+    ) return;
+
 
     overlay.classList.remove(
 
         "hidden"
 
     );
+
 
     const title =
 
@@ -2096,9 +4127,16 @@ function showLoading(message) {
 
         );
 
-    if (title) {
 
-        title.textContent = message;
+    if (
+
+        title
+
+    ) {
+
+        title.textContent =
+
+            message;
 
     }
 
@@ -2109,22 +4147,33 @@ function hideLoading() {
 
     const overlay =
 
-        query(".loading-overlay");
+        query(
 
-    if (!overlay) return;
+            ".loading-overlay"
 
-    overlay.classList.add(
+        );
 
-        "hidden"
 
-    );
+    if (
+
+        overlay
+
+    ) {
+
+        overlay.classList.add(
+
+            "hidden"
+
+        );
+
+    }
 
 }
 
 
-// =========================================================
-// TOAST
-// =========================================================
+/* =========================================================
+   TOAST
+========================================================= */
 
 function showToast(
 
@@ -2136,19 +4185,32 @@ function showToast(
 
     let container =
 
-        query(".toast-container");
+        query(
 
-    if (!container) {
-
-        container = document.createElement(
-
-            "div"
+            ".toast-container"
 
         );
+
+
+    if (
+
+        !container
+
+    ) {
+
+        container =
+
+            document.createElement(
+
+                "div"
+
+            );
+
 
         container.className =
 
             "toast-container";
+
 
         document.body.appendChild(
 
@@ -2158,6 +4220,7 @@ function showToast(
 
     }
 
+
     const toast =
 
         document.createElement(
@@ -2166,11 +4229,27 @@ function showToast(
 
         );
 
-    toast.className = `toast ${type}`;
 
-    toast.textContent = message;
+    toast.className =
 
-    container.appendChild(toast);
+        `toast ${
+
+            type
+
+        }`;
+
+
+    toast.textContent =
+
+        message;
+
+
+    container.appendChild(
+
+        toast
+
+    );
+
 
     setTimeout(
 
@@ -2180,52 +4259,126 @@ function showToast(
 
         },
 
-        3500
+        4000
 
     );
 
 }
 
 
-// =========================================================
-// UTILITY
-// =========================================================
+/* =========================================================
+   HTML ESCAPE
+========================================================= */
 
-function wait(ms) {
+function escapeHTML(
 
-    return new Promise(
+    value
 
-        resolve =>
+) {
 
-            setTimeout(
+    return String(
 
-                resolve,
+        value
 
-                ms
+    )
+
+        .replace(
+
+            /&/g,
+
+            "&amp;"
+
+        )
+
+        .replace(
+
+            /</g,
+
+            "&lt;"
+
+        )
+
+        .replace(
+
+            />/g,
+
+            "&gt;"
+
+        )
+
+        .replace(
+
+            /"/g,
+
+            "&quot;"
+
+        )
+
+        .replace(
+
+            /'/g,
+
+            "&#039;"
+
+        );
+
+}
+
+
+/* =========================================================
+   CLOSE SUGGESTIONS WHEN CLICKING OUTSIDE
+========================================================= */
+
+document.addEventListener(
+
+    "click",
+
+    event => {
+
+        const searchBox =
+
+            query(
+
+                ".search-box"
+
+            );
+
+
+        if (
+
+            searchBox &&
+
+            !searchBox.contains(
+
+                event.target
 
             )
 
-    );
+        ) {
 
-}
+            hideSuggestions();
+
+        }
+
+    }
+
+);
 
 
-// =========================================================
-// GLOBAL FUNCTIONS
-// =========================================================
+/* =========================================================
+   GLOBAL FUNCTIONS
+========================================================= */
 
-window.searchStock = searchStock;
+window.searchStocks =
 
-window.analyzeStock = analyzeStock;
+    searchStocks;
 
-window.loadRealTimeQuotes =
 
-    loadRealTimeQuotes;
+window.selectStock =
 
-window.calculateTechnicalScore =
+    selectStock;
 
-    calculateTechnicalScore;
 
-window.getSignalFromScore =
+window.analyzeSelectedStock =
 
-    getSignalFromScore;
+    analyzeSelectedStock;
