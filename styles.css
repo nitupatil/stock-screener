@@ -1,31 +1,22 @@
-/* ==========================================================================
-   Base Variables & Theming
-   ========================================================================== */
 :root {
-    /* Glassmorphism Variables */
     --glass-bg: rgba(20, 25, 35, 0.4);
     --glass-border: rgba(255, 255, 255, 0.08);
     --glass-highlight: rgba(255, 255, 255, 0.15);
     --glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.37);
     --blur: blur(16px);
     
-    /* Brand & Signal Colors */
     --color-bg: #0a0e17;
     --color-text: #e2e8f0;
     --color-text-muted: #94a3b8;
-    --color-buy: #00ff73;       /* Bright Green */
-    --color-hold: #ffcc00;      /* Yellow */
-    --color-sell: #ff3366;      /* Red */
-    --color-primary: #3b82f6;   /* Accent Blue */
+    --color-buy: #00ff73;
+    --color-hold: #ffcc00;
+    --color-sell: #ff3366;
+    --color-primary: #3b82f6;
     
-    /* Typography */
     --font-main: 'Inter', sans-serif;
     --font-mono: 'JetBrains Mono', monospace;
 }
 
-/* ==========================================================================
-   Reset & Animated Background
-   ========================================================================== */
 * {
     margin: 0;
     padding: 0;
@@ -41,7 +32,6 @@ body {
     position: relative;
 }
 
-/* Dynamic Animated Background for Glass to overlay */
 body::before, body::after {
     content: '';
     position: fixed;
@@ -73,9 +63,6 @@ body::after {
     100% { transform: translate(50px, 50px) scale(1.1); }
 }
 
-/* ==========================================================================
-   Glassmorphism Utility Class
-   ========================================================================== */
 .card, .ticker-wrap, .api-config-panel, .dropdown-content {
     background: var(--glass-bg);
     backdrop-filter: var(--blur);
@@ -85,9 +72,6 @@ body::after {
     box-shadow: var(--glass-shadow);
 }
 
-/* ==========================================================================
-   Market Ticker
-   ========================================================================== */
 .ticker-wrap {
     width: 100%;
     overflow: hidden;
@@ -123,9 +107,6 @@ body::after {
     100% { transform: translateX(-100%); }
 }
 
-/* ==========================================================================
-   Header & API Config
-   ========================================================================== */
 .main-header {
     display: flex;
     justify-content: space-between;
@@ -139,9 +120,7 @@ body::after {
     letter-spacing: -1px;
 }
 
-.logo-area span {
-    color: var(--color-buy);
-}
+.logo-area span { color: var(--color-buy); }
 
 .badge {
     font-size: 0.75rem;
@@ -158,42 +137,6 @@ body::after {
     border-radius: 50px;
 }
 
-.input-group label {
-    display: none; /* Hidden visually, for accessibility */
-}
-
-input {
-    background: rgba(255, 255, 255, 0.05);
-    border: 1px solid var(--glass-border);
-    color: var(--color-text);
-    padding: 0.6rem 1rem;
-    border-radius: 8px;
-    font-family: var(--font-mono);
-    outline: none;
-    transition: 0.3s;
-}
-
-input:focus {
-    border-color: var(--color-primary);
-    background: rgba(255, 255, 255, 0.1);
-}
-
-.btn-primary {
-    background: var(--color-primary);
-    color: white;
-    border: none;
-    padding: 0.6rem 1.2rem;
-    border-radius: 8px;
-    font-weight: 600;
-    cursor: pointer;
-    transition: 0.3s;
-}
-
-.btn-primary:hover {
-    box-shadow: 0 0 15px rgba(59, 130, 246, 0.5);
-    transform: translateY(-2px);
-}
-
 .status-dot {
     width: 10px;
     height: 10px;
@@ -206,9 +149,6 @@ input:focus {
     box-shadow: 0 0 8px var(--color-buy);
 }
 
-/* ==========================================================================
-   Main Grid Layout
-   ========================================================================== */
 .app-container {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -218,20 +158,10 @@ input:focus {
     margin: 0 auto;
 }
 
-.card {
-    padding: 1.5rem;
-    margin-bottom: 1.5rem;
-}
+.card { padding: 1.5rem; margin-bottom: 1.5rem; }
+h2 { font-size: 1.25rem; font-weight: 600; margin-bottom: 1rem; }
 
-h2 {
-    font-size: 1.25rem;
-    font-weight: 600;
-    margin-bottom: 1rem;
-}
-
-/* ==========================================================================
-   Left Panel: Search & Analysis
-   ========================================================================== */
+/* Autocomplete Search Dropdown */
 .search-box {
     position: relative;
     width: 100%;
@@ -241,7 +171,50 @@ h2 {
     width: 100%;
     font-size: 1.1rem;
     padding: 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid var(--glass-border);
+    color: var(--color-text);
+    border-radius: 8px;
+    font-family: var(--font-mono);
+    outline: none;
+    transition: 0.3s;
 }
+
+.search-box input:focus {
+    border-color: var(--color-primary);
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.dropdown-content {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    max-height: 250px;
+    overflow-y: auto;
+    background: var(--color-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: 8px;
+    margin-top: 5px;
+    z-index: 1000;
+    box-shadow: var(--glass-shadow);
+}
+
+.dropdown-content.hidden { display: none; }
+
+.dropdown-item {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    font-family: var(--font-mono);
+    font-weight: 500;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    transition: background 0.2s;
+}
+
+.dropdown-item:last-child { border-bottom: none; }
+.dropdown-item:hover { background: rgba(59, 130, 246, 0.15); color: var(--color-buy); }
+.dropdown-content::-webkit-scrollbar { width: 6px; }
+.dropdown-content::-webkit-scrollbar-thumb { background: var(--glass-border); border-radius: 4px; }
 
 .live-price-block {
     display: flex;
@@ -265,10 +238,7 @@ h2 {
     font-family: var(--font-mono);
 }
 
-/* Consensus Meter (Green to Yellow) */
-.consensus-meter-container {
-    margin: 2rem 0;
-}
+.consensus-meter-container { margin: 2rem 0; }
 
 .meter-bar-bg {
     width: 100%;
@@ -287,13 +257,8 @@ h2 {
     box-shadow: 0 0 10px rgba(0, 255, 115, 0.5);
 }
 
-.meter-verdict {
-    text-align: right;
-    font-weight: 600;
-    color: var(--color-buy);
-}
+.meter-verdict { text-align: right; font-weight: 600; color: var(--color-buy); }
 
-/* Indicators Grid */
 .indicators-grid {
     display: grid;
     grid-template-columns: repeat(2, 1fr);
@@ -312,20 +277,12 @@ h2 {
     transition: transform 0.2s;
 }
 
-.indicator-tile:hover {
-    transform: scale(1.02);
-    border-color: var(--glass-highlight);
-}
-
+.indicator-tile:hover { transform: scale(1.02); border-color: var(--glass-highlight); }
 .ind-name { color: var(--color-text-muted); font-size: 0.85rem; }
 .ind-value { font-family: var(--font-mono); font-size: 1.25rem; font-weight: 600; }
 .badge-neutral { color: var(--color-hold); }
 
-/* Trade Matrix */
-.matrix-grid {
-    display: flex;
-    gap: 1rem;
-}
+.matrix-grid { display: flex; gap: 1rem; }
 
 .matrix-box {
     flex: 1;
@@ -340,87 +297,16 @@ h2 {
 .matrix-box.entry { background: rgba(59, 130, 246, 0.1); border-color: var(--color-primary); }
 .matrix-box.target { background: rgba(0, 255, 115, 0.1); border-color: var(--color-buy); }
 .matrix-box.stoploss { background: rgba(255, 51, 102, 0.1); border-color: var(--color-sell); }
-
 .matrix-label { font-size: 0.75rem; text-transform: uppercase; color: var(--color-text-muted); }
 .matrix-value { font-family: var(--font-mono); font-weight: 700; font-size: 1.1rem; margin-top: 0.5rem; }
 
-/* ==========================================================================
-   Right Panel: Screener Tables
-   ========================================================================== */
-.table-responsive {
-    overflow-x: auto;
-}
+.table-responsive { overflow-x: auto; }
+.screener-table { width: 100%; border-collapse: collapse; text-align: left; }
+.screener-table th { padding: 1rem 0.5rem; color: var(--color-text-muted); font-weight: 500; border-bottom: 1px solid var(--glass-border); }
+.screener-table td { padding: 1rem 0.5rem; border-bottom: 1px solid rgba(255, 255, 255, 0.03); font-family: var(--font-mono); }
+.screener-table tbody tr { transition: background 0.2s; }
+.screener-table tbody tr:hover { background: rgba(255, 255, 255, 0.05); cursor: pointer; }
+.text-dimmed { opacity: 0.7; }
 
-.screener-table {
-    width: 100%;
-    border-collapse: collapse;
-    text-align: left;
-}
-
-.screener-table th {
-    padding: 1rem 0.5rem;
-    color: var(--color-text-muted);
-    font-weight: 500;
-    border-bottom: 1px solid var(--glass-border);
-}
-
-.screener-table td {
-    padding: 1rem 0.5rem;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
-    font-family: var(--font-mono);
-}
-
-.screener-table tbody tr {
-    transition: background 0.2s;
-}
-
-.screener-table tbody tr:hover {
-    background: rgba(255, 255, 255, 0.05);
-    cursor: pointer;
-}
-
-.text-dimmed {
-    opacity: 0.7;
-}
-
-/* ==========================================================================
-   Responsive Design
-   ========================================================================== */
-@media (max-width: 1024px) {
-    .app-container {
-        grid-template-columns: 1fr;
-    }
-    
-    .api-config-panel {
-        flex-direction: column;
-        background: transparent;
-        border: none;
-        box-shadow: none;
-    }
-}
-
-@media (max-width: 768px) {
-    .main-header {
-        flex-direction: column;
-        gap: 1.5rem;
-        text-align: center;
-    }
-    
-    .matrix-grid {
-        flex-direction: column;
-    }
-    
-    .price-mono {
-        font-size: 2rem;
-    }
-}
-
-/* Animations */
-.pulse-update {
-    animation: pulseGlow 1s ease-out;
-}
-
-@keyframes pulseGlow {
-    0% { text-shadow: 0 0 10px var(--color-buy); color: white; }
-    100% { text-shadow: none; }
-}
+@media (max-width: 1024px) { .app-container { grid-template-columns: 1fr; } }
+@media (max-width: 768px) { .main-header { flex-direction: column; gap: 1.5rem; text-align: center; } .matrix-grid { flex-direction: column; } .price-mono { font-size: 2rem; } }
